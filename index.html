@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Asteroids</title>
+  <script src="assets/vector-battle-regular.typeface.js"></script>
+  <script src="game.js"></script>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      display: flex;
+      gap: 40px;
+      align-items: center;
+    }
+
+    .info-panel {
+      width: 200px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .info-panel h2 {
+      margin-top: 0;
+      border-bottom: 1px solid #666;
+      padding-bottom: 8px;
+    }
+
+    #canvas {
+      border: 1px solid #333;
+      background: #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="info-panel">
+      <h2>Asteroids</h2>
+      <p>消灭所有小行星，避免碰撞。击碎大行星会产生更多小行星。</p>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div class="info-panel">
+      <h2>键位说明</h2>
+      <p>
+        ← → / A D：转向<br>
+        ↑ / W：加速<br>
+        ↓ / S：减速<br>
+        <br>
+        Space：机炮<br>
+        Q / Z：导弹<br>
+        <br>
+        Esc / P：暂停<br>
+        M：静音<br>
+        F：显示刷新率<br>
+        G：显示碰撞箱
+      </p>
+    </div>
+  </div>
+</body>
+
+</html>
