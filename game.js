@@ -1,17 +1,49 @@
 // 游戏配置
 var GameConfig = {
-  width: 1280,      // 窗体宽 1.6x 800
-  height: 960,      // 窗体高 1.6x 600
+  width: (typeof window !== 'undefined' ? window.innerWidth : 1600),      // 窗体宽（默认全屏）
+  height: (typeof window !== 'undefined' ? window.innerHeight : 960),      // 窗体高（默认全屏）
   startLives: 6,    // 初始生命值
   startAsteroids: 6, // 初始陨石数量
 
-  bulletSpeed: 17,   // 子弹速度
-  bulletLifetime: 40, // 子弹寿命（帧数）
-  alienBulletLifetime: 55, // 外星子弹寿命（帧数）
-  missileSpeed: 25,  // 导弹速度
+  bulletSpeed: 20,   // 子弹速度
+  playerMaxBullets: 15, // 同时存在的玩家子弹最大值
+  playerBulletCooldown: 1, // 玩家机炮发射间隔（帧）
+  playerBulletBurstCount: 2, // 玩家机炮每轮连发数
+  playerBulletBurstShotInterval: 0, // 玩家机炮连发内间隔（帧）
+  bulletLifetime: 50, // 子弹寿命（帧数）
+  playerMissileCooldown: 50, // 玩家导弹发射间隔（帧）
+  playerMaxSpeed: 8, // 玩家最大速度
+  playerAccel: 0.5, // 玩家推进加速度
+  playerBrakeAccel: 0.1, // 玩家刹车加速度
+  playerRotSpeed: 7, // 玩家旋转速度
+  alienBulletLifetime: 65, // 外星子弹寿命（帧数）
+  missileSpeed: 26,  // 导弹速度
   missileLifetime: 25, // 导弹寿命（帧数）
-  missileTrackingRange: 150, // 导弹追踪范围
-  missileTurnRate: 13 // 导弹转向速度
+  missileTrackingRange: 170, // 导弹追踪范围
+  missileTurnRate: 12, // 导弹转向速度
+  missileExplosionRadius: 70, // 导弹爆炸半径
+
+  fighterFirstSpawnDelay: 11000, // 敌机首次生成延迟(ms)
+  fighterSpawnInterval: 10000,   // 敌机生成基础间隔(ms)
+  fighterMaxSpeed: 8, // 敌机最大速度
+  fighterAccel: 0.5, // 敌机常规加速度
+  fighterAvoidAccel: 0.6, // 敌机躲避加速度
+  fighterIdleAccel: 0.35, // 敌机无目标加速度
+  fighterTurnSpeed: 6, // 敌机旋转速度
+  fighterAsteroidShootRange: 300, // 敌机射击陨石距离阈值
+
+  enemyBulletSpeed: 16, // 敌机机炮子弹速度
+  enemyBulletLifetime: 45, // 敌机机炮子弹寿命（帧数）
+  enemyBulletBurstCount: 5, // 敌机机炮每轮连发数
+  enemyBulletBurstShotInterval: 6, // 敌机机炮连发内间隔（帧）
+  enemyBulletBurstPause: 24, // 敌机机炮两轮连发间隔（帧）
+  enemyMissileCooldown: 99, // 敌机导弹发射间隔（帧）
+  enemyMissileSpawnCooldown: 33, // 敌机生成后首发导弹间隔（帧）
+  enemyMissileSpeed: 20, // 敌机导弹速度
+  enemyMissileLifetime: 25, // 敌机导弹寿命（帧数）
+  enemyMissileTrackingRange: 240, // 敌机导弹追踪范围
+  enemyMissileTurnRate: 3, // 敌机导弹转向速度（更小）
+  enemyMissileExplosionRadius: 38 // 敌机导弹爆炸半径（更小）
 };
 
 // 输入映射到游戏动作
@@ -31,6 +63,7 @@ var KEY_CODES = {
   77: 'mute',       // M键静音
   80: 'pause',      // P键暂停
   81: 'missile',    // Q键导弹
+  85: 'playerui',   // U键开关速度/子弹UI
   90: 'missile'     // Z键导弹
 }
 
@@ -406,7 +439,6 @@ Ship = function () {
     [-5, 4,
       0, -12,
       5, 4]);
-
   this.children.exhaust = new Sprite();
   this.children.exhaust.init("exhaust",
     [-3, 6,
@@ -414,22 +446,54 @@ Ship = function () {
       3, 6]);
 
   this.bulletCounter = 0;
+  this.bulletBurstShotsLeft = 0;
+  this.bulletBurstGapCounter = 0;
   this.missileCooldown = 0;
   this.thrustPlaying = false;
 
   this.postMove = this.wrapPostMove;
 
   this.collidesWith = ["asteroid", "bigalien", "alienbullet"];
+  this.collidesWith.push("fighter", "fighterbullet", "fightermissile");
+
+  this.fireBullet = function () {
+    for (var i = 0; i < this.bullets.length; i++) {
+      if (!this.bullets[i].visible) {
+        SFX.laser();
+        var bullet = this.bullets[i];
+        var rad = ((this.rot - 90) * Math.PI) / 180;
+        var vectorx = Math.cos(rad);
+        var vectory = Math.sin(rad);
+        bullet.x = this.x + vectorx * 4;
+        bullet.y = this.y + vectory * 4;
+        bullet.vel.x = GameConfig.bulletSpeed * vectorx + this.vel.x;
+        bullet.vel.y = GameConfig.bulletSpeed * vectory + this.vel.y;
+        bullet.visible = true;
+        break;
+      }
+    }
+  };
 
   // 读取输入并转为旋转、推进和射击
   this.preMove = function (delta) {
     // 旋转控制
     if (KEY_STATUS.left) {
-      this.vel.rot = -6;
+      this.vel.rot = -GameConfig.playerRotSpeed;
     } else if (KEY_STATUS.right) {
-      this.vel.rot = 6;
+      this.vel.rot = GameConfig.playerRotSpeed;
     } else {
       this.vel.rot = 0;
+    }
+
+    // 停止停止推进音效
+    if (!KEY_STATUS.up) {
+      var thrustStopAudio = SFX.thrust();
+        try {
+          thrustStopAudio.pause();
+          thrustStopAudio.currentTime = 0;
+          thrustStopAudio.loop = false;
+        } catch (e) { }
+        this.thrustPlaying = false;
     }
 
     // 前进推进
@@ -450,25 +514,14 @@ Ship = function () {
         this.thrustPlaying = true;
       }
       var rad = ((this.rot - 90) * Math.PI) / 180;
-      this.acc.x = 0.5 * Math.cos(rad);
-      this.acc.y = 0.5 * Math.sin(rad);
+      this.acc.x = GameConfig.playerAccel * Math.cos(rad);
+      this.acc.y = GameConfig.playerAccel * Math.sin(rad);
       this.children.exhaust.visible = Math.random() > 0.1;
       // 逆向刹车（弱于推进）
-    }
-    else if (KEY_STATUS.down) {
-      // 停止推进音效
-      if (this.thrustPlaying) {
-        var thrustStopAudio = SFX.thrust();
-        try {
-          thrustStopAudio.pause();
-          thrustStopAudio.currentTime = 0;
-          thrustStopAudio.loop = false;
-        } catch (e) { }
-        this.thrustPlaying = false;
-      }
+    }else if (KEY_STATUS.down) {
       var speed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
       if (speed > 0) {
-        var brakeAccel = 0.1;
+        var brakeAccel = GameConfig.playerBrakeAccel;
         this.acc.x = -brakeAccel * (this.vel.x / speed);
         this.acc.y = -brakeAccel * (this.vel.y / speed);
       } else {
@@ -476,18 +529,7 @@ Ship = function () {
         this.acc.y = 0;
       }
       this.children.exhaust.visible = false;
-    }
-    else {
-      // 停止推进音效
-      if (this.thrustPlaying) {
-        var thrustStopAudio = SFX.thrust();
-        try {
-          thrustStopAudio.pause();
-          thrustStopAudio.currentTime = 0;
-          thrustStopAudio.loop = false;
-        } catch (e) { }
-        this.thrustPlaying = false;
-      }
+    }else {
       this.acc.x = 0;
       this.acc.y = 0;
       this.children.exhaust.visible = false;
@@ -497,37 +539,31 @@ Ship = function () {
     if (this.bulletCounter > 0) {
       this.bulletCounter -= delta;
     }
-    // 子弹从机头生成
-    if (KEY_STATUS.space) {
-      if (this.bulletCounter <= 0) {
-        this.bulletCounter = 10;
-        for (var i = 0; i < this.bullets.length; i++) {
-          if (!this.bullets[i].visible) {
-            SFX.laser();
-            var bullet = this.bullets[i];
-            var rad = ((this.rot - 90) * Math.PI) / 180;
-            var vectorx = Math.cos(rad);
-            var vectory = Math.sin(rad);
-            // 移到机头位置
-            bullet.x = this.x + vectorx * 4;
-            bullet.y = this.y + vectory * 4;
-            bullet.vel.x = GameConfig.bulletSpeed * vectorx + this.vel.x;
-            bullet.vel.y = GameConfig.bulletSpeed * vectory + this.vel.y;
-            bullet.visible = true;
-            break;
-          }
-        }
-      }
+    if (this.bulletBurstGapCounter > 0) {
+      this.bulletBurstGapCounter -= delta;
+    }
+
+    // 机炮三连发：间隔触发一轮，每轮3发
+    if (KEY_STATUS.space && this.bulletBurstShotsLeft <= 0 && this.bulletCounter <= 0) {
+      this.bulletCounter = GameConfig.playerBulletCooldown;
+      this.bulletBurstShotsLeft = GameConfig.playerBulletBurstCount;
+      this.bulletBurstGapCounter = 0;
+    }
+
+    if (this.bulletBurstShotsLeft > 0 && this.bulletBurstGapCounter <= 0) {
+      this.fireBullet();
+      this.bulletBurstShotsLeft--;
+      this.bulletBurstGapCounter = GameConfig.playerBulletBurstShotInterval;
     }
 
     // 导弹冷却
     if (this.missileCooldown > 0) {
       this.missileCooldown -= delta;
     }
-    // Z键发射导弹
-    if (KEY_STATUS.missile) {
+    // 发射导弹
+    if (KEY_STATUS.missile || KEY_STATUS.space) {
       if (this.missileCooldown <= 0) {
-        this.missileCooldown = 33; // ~1秒冷却
+        this.missileCooldown = GameConfig.playerMissileCooldown;
         for (var i = 0; i < this.missiles.length; i++) {
           if (!this.missiles[i].visible) {
             SFX.laser();
@@ -557,25 +593,78 @@ Ship = function () {
     }
 
     // 限制最高速度
-    if (Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y) > 8) {
+    if (Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y) > GameConfig.playerMaxSpeed) {
       this.vel.x *= 0.95;
       this.vel.y *= 0.95;
     }
   };
 
   this.collision = function (other) {
+    if (!this.visible) return;
     SFX.explosion();
     Game.explosionAt(other.x, other.y);
+
+    var lostWholeLife = Game.consumeLifeSegment();
+
+    // 前两次扣血：不死亡，只施加较大反向冲击
+    if (!lostWholeLife) {
+      var speed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
+      var dirX = 0;
+      var dirY = 0;
+
+      if (speed > 1) {  // 如果速度较快，与当前速度反向冲击
+        dirX = -this.vel.x / speed;
+        dirY = -this.vel.y / speed;
+      } else if (other && typeof other.x === 'number' && typeof other.y === 'number') {  // 如果速度较慢，朝碰撞源反方向冲击
+        var awayX = this.x - other.x;
+        var awayY = this.y - other.y;
+        var awayLen = Math.sqrt(awayX * awayX + awayY * awayY);
+        if (awayLen > 0.001) {
+          dirX = awayX / awayLen;
+          dirY = awayY / awayLen;
+        } else {
+          var randRad = Math.random() * Math.PI * 2;
+          dirX = Math.cos(randRad);
+          dirY = Math.sin(randRad);
+        }
+      } else {  // 否则随机一个方向
+        var randomRad = Math.random() * Math.PI * 2;
+        dirX = Math.cos(randomRad);
+        dirY = Math.sin(randomRad);
+      }
+
+      var accelKick = 1 + Math.random() * 0.6;
+      var velocityKick = 6 + Math.random() * 3;
+      this.acc.x = dirX * accelKick;
+      this.acc.y = dirY * accelKick;
+      this.vel.x += dirX * velocityKick;
+      this.vel.y += dirY * velocityKick;
+      this.vel.rot += (Math.random() * 2 - 1) * 4;
+      return;
+    }
+
     Game.FSM.state = 'player_died';
     this.visible = false;
-    this.currentNode.leave(this);
-    this.currentNode = null;
+    if (this.currentNode) {
+      this.currentNode.leave(this);
+      this.currentNode = null;
+    }
+    if (this.thrustPlaying) {   // 真死时强制停止推进音效
+      var thrustStopAudio = SFX.thrust();
+        try {
+          thrustStopAudio.pause();
+          thrustStopAudio.currentTime = 0;
+          thrustStopAudio.loop = false;
+        } catch (e) { }
+        this.thrustPlaying = false;
+    }
     for (var i = 0; i < Game.sprites.length; i++) {
-      if (Game.sprites[i].name === 'alienbullet') {
+      if (Game.sprites[i].name === 'alienbullet' ||
+        Game.sprites[i].name === 'fighterbullet' ||
+        Game.sprites[i].name === 'fightermissile') {
         Game.sprites[i].visible = false;
       }
     }
-    Game.lives--;
   };
 
 };
@@ -662,7 +751,7 @@ BigAlien = function () {
       this.vel.y = -this.vel.y;
     }
 
-    // 偶尔朝玩家开火
+    // 朝玩家开火
     this.bulletCounter -= delta;
     if (this.bulletCounter <= 0) {
       this.bulletCounter = 22;
@@ -725,8 +814,6 @@ Bullet = function () {
   this.bridgesH = false;
   this.bridgesV = false;
   this.postMove = this.wrapPostMove;
-  // 小行星可主动检测子弹
-  //this.collidesWith = ["asteroid"];
 
   this.configureTransform = function () { };
   this.draw = function () {
@@ -773,7 +860,7 @@ AlienBullet = function () {
     if (this.visible) {
       this.time += delta;
     }
-    if (this.time > GameConfig.alienBulletLifetime) {
+    if (this.time > GameConfig.enemyBulletLifetime) {
       this.visible = false;
       this.time = 0;
     }
@@ -792,6 +879,36 @@ AlienBullet = function () {
   };
 };
 AlienBullet.prototype = new Bullet();
+
+// 敌对战机机炮子弹
+FighterBullet = function () {
+  this.init("fighterbullet");
+
+  this.preMove = function (delta) {
+    if (this.visible) {
+      this.time += delta;
+    }
+    if (this.time > GameConfig.alienBulletLifetime) {
+      this.visible = false;
+      this.time = 0;
+    }
+  };
+
+  this.draw = function () {
+    if (this.visible) {
+      this.context.save();
+      this.context.lineWidth = 2;
+      this.context.beginPath();
+      this.context.moveTo(this.x - 1, this.y - 1);
+      this.context.lineTo(this.x + 1, this.y + 1);
+      this.context.moveTo(this.x + 1, this.y - 1);
+      this.context.lineTo(this.x - 1, this.y + 1);
+      this.context.stroke();
+      this.context.restore();
+    }
+  };
+};
+FighterBullet.prototype = new Bullet();
 
 // 追踪导弹：自动追踪最近目标，飞行一段距离后爆炸（范围伤害）
 Missile = function () {
@@ -856,7 +973,27 @@ Missile = function () {
       this.target = null;
     }
 
-    // 仅当从未锁定目标时，寻找最近目标
+    // 仅当从未锁定目标时，先找最近的敌机
+    if (!this.target) {
+      var nearestEnemyDist = Infinity;
+      for (var i = 0; i < Game.sprites.length; i++) {
+        var enemy = Game.sprites[i];
+        if (!enemy.visible || enemy.name !== "fighter") continue;
+        var ex = enemy.x - this.x;
+        var ey = enemy.y - this.y;
+
+        var edot = this.vel.x * ex + this.vel.y * ey;
+        if (edot <= 0) continue;
+
+        var edist = Math.sqrt(ex * ex + ey * ey);
+        if (edist < nearestEnemyDist) {
+          nearestEnemyDist = edist;
+          this.target = enemy;
+        }
+      }
+    }
+
+    // 若没有敌机可锁定，再找其他目标
     if (!this.target) {
       var nearestDist = Infinity;
       for (var i = 0; i < Game.sprites.length; i++) {
@@ -866,11 +1003,11 @@ Missile = function () {
           var dx = s.x - this.x;
           var dy = s.y - this.y;
 
-          // 扩大到前方约-80到80度范围内寻找目标
+          // 在前方约-80到80度扇形范围内寻找目标
           // 利用点积与叉积限制搜索角度
           var dot = this.vel.x * dx + this.vel.y * dy;
           var cross = this.vel.x * dy - this.vel.y * dx;
-          if (dot <= 0 || Math.abs(cross) > dot * 2.747) continue;
+          if (dot <= 0 || Math.abs(cross) > dot * 5.7) continue;  // tan(70°)=2.747，tan(80°)=5.671，tan(85°)=11.43
 
           var dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < nearestDist) {
@@ -934,7 +1071,7 @@ Missile = function () {
       this.currentNode = null;
     }
     // 范围伤害
-    var explosionRadius = 70;
+    var explosionRadius = GameConfig.missileExplosionRadius;
     var myX = this.x;
     var myY = this.y;
     for (var i = 0; i < Game.sprites.length; i++) {
@@ -951,7 +1088,7 @@ Missile = function () {
       }
     }
     SFX.explosion();
-    Game.missileExplosionAt(myX, myY);
+    Game.missileExplosionAt(myX, myY, explosionRadius);
     this.time = 0;
   };
 
@@ -974,26 +1111,435 @@ Missile = function () {
 };
 Missile.prototype = new Sprite();
 
+// 敌对战机导弹：追踪玩家，爆炸半径更小，转向力度更小
+FighterMissile = function () {
+  this.init("fightermissile",
+    [-2, 3,
+      0, -5,
+      2, 3]);
+  this.time = 0;
+  this.bridgesH = false;
+  this.bridgesV = false;
+  this.postMove = this.wrapPostMove;
+  this.maxFlightTime = GameConfig.enemyMissileLifetime;
+  this.collidesWith = [];
+  this.speed = GameConfig.enemyMissileSpeed;
+  this.target = null;
+
+  this.configureTransform = function () { };
+
+  this.draw = function () {
+    if (this.visible) {
+      this.context.save();
+      this.context.translate(this.x, this.y);
+      var rad = (this.rot * Math.PI) / 180;
+      this.context.rotate(rad);
+      this.context.lineWidth = 1.5;
+      this.context.beginPath();
+      this.context.moveTo(-2, 3);
+      this.context.lineTo(0, -5);
+      this.context.lineTo(2, 3);
+      this.context.closePath();
+      this.context.stroke();
+      if (Math.random() > 0.3) {
+        this.context.beginPath();
+        this.context.moveTo(-1, 3);
+        this.context.lineTo(0, 6 + Math.random() * 3);
+        this.context.lineTo(1, 3);
+        this.context.stroke();
+      }
+      this.context.restore();
+    }
+  };
+
+  this.preMove = function (delta) {
+    if (!this.visible) return;
+    this.time += delta;
+    if (this.time > this.maxFlightTime) {
+      this.explode();
+      return;
+    }
+
+    if (!Game.ship.visible) {
+      return;
+    }
+
+    this.target = Game.ship;
+    var dx = this.target.x - this.x;
+    var dy = this.target.y - this.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > GameConfig.enemyMissileTrackingRange) {
+      return;
+    }
+
+    if (dist > 0) {
+      var dirX = dx / dist;
+      var dirY = dy / dist;
+      var turnFactor = GameConfig.enemyMissileTurnRate;
+      this.vel.x += dirX * turnFactor * delta;
+      this.vel.y += dirY * turnFactor * delta;
+
+      var currentSpeed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
+      if (currentSpeed > 0) {
+        this.vel.x = (this.vel.x / currentSpeed) * this.speed;
+        this.vel.y = (this.vel.y / currentSpeed) * this.speed;
+      }
+    }
+
+    var speed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
+    if (speed > 0.1) {
+      this.rot = (Math.atan2(this.vel.y, this.vel.x) * 180 / Math.PI) + 90;
+    }
+  };
+
+  this.explode = function () {
+    if (!this.visible) return;
+    this.visible = false;
+    if (this.currentNode) {
+      this.currentNode.leave(this);
+      this.currentNode = null;
+    }
+
+    var explosionRadius = GameConfig.enemyMissileExplosionRadius;
+    var myX = this.x;
+    var myY = this.y;
+    for (var i = 0; i < Game.sprites.length; i++) {
+      var s = Game.sprites[i];
+      if (!s.visible) continue;
+      if (s.name === "ship" || s.name === "asteroid") {
+        var dx = s.x - myX;
+        var dy = s.y - myY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < explosionRadius) {
+          var proxy = { name: "fightermissile", x: s.x, y: s.y };
+          s.collision(proxy);
+        }
+      }
+    }
+    SFX.explosion();
+    Game.missileExplosionAt(myX, myY, explosionRadius);
+    this.time = 0;
+  };
+
+  this.collision = function () {
+    this.explode();
+  };
+
+  this.transformedPoints = function () {
+    var rad = (this.rot * Math.PI) / 180;
+    var cos = Math.cos(rad);
+    var sin = Math.sin(rad);
+    var pts = [[-2, 3], [0, -5], [2, 3]];
+    var result = [];
+    for (var i = 0; i < pts.length; i++) {
+      result.push(this.x + pts[i][0] * cos - pts[i][1] * sin);
+      result.push(this.y + pts[i][0] * sin + pts[i][1] * cos);
+    }
+    return result;
+  };
+};
+FighterMissile.prototype = new Sprite();
+
+// 敌对战机：默认可生成，出现条件由 Game.FSM.run 控制
+Fighter = function () {
+  this.init("fighter",
+    [-5, 4,
+      0, -12,
+      5, 4]);
+
+  this.children.leftWing = new Sprite();
+  this.children.leftWing.init("fighter_leftwing",
+    [-11, -8,
+    -8, -8,
+    -8, 8,
+    -11, 8]);
+  this.children.leftWing.visible = true;
+
+  this.children.rightWing = new Sprite();
+  this.children.rightWing.init("fighter_rightwing",
+    [11, -8,
+      8, -8,
+      8, 8,
+      11, 8]);
+  this.children.rightWing.visible = true;
+
+  this.children.cockpit = new Sprite();
+  this.children.cockpit.init("fighter_cockpit",
+    [-3, -2,
+      0, -5,
+      3, -2,
+      0, 2]);
+  this.children.cockpit.visible = true;
+
+  this.postMove = this.wrapPostMove;
+  this.collidesWith = ["asteroid", "ship", "bullet", "missile"];
+
+  this.bullets = [];
+  this.missiles = [];
+  this.bulletBurstShotsLeft = 0;
+  this.bulletBurstGapCounter = 0;
+  this.bulletBurstPauseCounter = 0;
+  this.missileCooldown = 0;
+
+  this.setup = function () {
+    for (var i = 0; i < 6; i++) {
+      var bullet = new FighterBullet();
+      this.bullets.push(bullet);
+      Game.sprites.push(bullet);
+    }
+    for (var j = 0; j < 3; j++) {
+      var missile = new FighterMissile();
+      this.missiles.push(missile);
+      Game.sprites.push(missile);
+    }
+  };
+
+  this.spawn = function (isBoot) {
+    var edge = Math.floor(Math.random() * 4);
+    if (isBoot) {
+      this.x = Game.canvasWidth / 2;
+      this.y = Game.canvasHeight / 2;
+    } else if (edge === 0) {
+      this.x = 20;
+      this.y = Math.random() * Game.canvasHeight;
+    } else if (edge === 1) {
+      this.x = Game.canvasWidth - 20;
+      this.y = Math.random() * Game.canvasHeight;
+    } else if (edge === 2) {
+      this.x = Math.random() * Game.canvasWidth;
+      this.y = 20;
+    } else {
+      this.x = Math.random() * Game.canvasWidth;
+      this.y = Game.canvasHeight - 20;
+    }
+    this.rot = Math.random() * 360;
+    this.vel.x = 0;
+    this.vel.y = 0;
+    this.vel.rot = 0;
+    this.acc.x = 0;
+    this.acc.y = 0;
+    this.bulletBurstShotsLeft = 0;
+    this.bulletBurstGapCounter = 0;
+    this.bulletBurstPauseCounter = 0;
+    this.missileCooldown = GameConfig.enemyMissileSpawnCooldown;
+    this.visible = true;
+  };
+
+  // 寻找前方一定范围内最近的小行星，作为避障目标
+  this.findPathAsteroid = function () {
+    var nearest = null;
+    var nearestDist = Infinity;
+    var forwardX = Math.cos((this.rot - 90) * Math.PI / 180);
+    var forwardY = Math.sin((this.rot - 90) * Math.PI / 180);
+    for (var i = 0; i < Game.sprites.length; i++) {
+      var s = Game.sprites[i];
+      if (!s.visible || s.name !== "asteroid") continue;
+      var dx = s.x - this.x;
+      var dy = s.y - this.y;
+      var dot = dx * forwardX + dy * forwardY;
+      if (dot <= 0 || dot > 190) continue;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = s;
+      }
+    }
+    return {
+      asteroid: nearest,
+      distance: nearestDist
+    };
+  };
+
+  this.normalizeAngle = function (deg) {
+    while (deg > 180) deg -= 360;
+    while (deg < -180) deg += 360;
+    return deg;
+  };
+
+  this.fireBullet = function () {
+    for (var i = 0; i < this.bullets.length; i++) {
+      if (!this.bullets[i].visible) {
+        var bullet = this.bullets[i];
+        var rad = ((this.rot - 90) * Math.PI) / 180;
+        var vectorx = Math.cos(rad);
+        var vectory = Math.sin(rad);
+        bullet.x = this.x + vectorx * 4;
+        bullet.y = this.y + vectory * 4;
+        bullet.vel.x = GameConfig.enemyBulletSpeed * vectorx + this.vel.x;
+        bullet.vel.y = GameConfig.enemyBulletSpeed * vectory + this.vel.y;
+        bullet.visible = true;
+        SFX.laser();
+        break;
+      }
+    }
+  };
+
+  this.fireMissile = function () {
+    for (var i = 0; i < this.missiles.length; i++) {
+      if (!this.missiles[i].visible) {
+        var missile = this.missiles[i];
+        var rad = ((this.rot - 90) * Math.PI) / 180;
+        var vectorx = Math.cos(rad);
+        var vectory = Math.sin(rad);
+        missile.x = this.x + vectorx * 4;
+        missile.y = this.y + vectory * 4;
+        missile.vel.x = missile.speed * vectorx;
+        missile.vel.y = missile.speed * vectory;
+        missile.rot = this.rot;
+        missile.visible = true;
+        missile.time = 0;
+        missile.target = null;
+        SFX.laser();
+        break;
+      }
+    }
+  };
+
+  this.preMove = function (delta) {
+    if (!this.visible) return;
+
+    var hasShip = Game.ship.visible;
+    var toShipX = hasShip ? Game.ship.x - this.x : 0;
+    var toShipY = hasShip ? Game.ship.y - this.y : 0;
+    var shipDist = Math.sqrt(toShipX * toShipX + toShipY * toShipY);
+    var shipAngle = hasShip ? (Math.atan2(toShipY, toShipX) * 180 / Math.PI) + 90 : this.rot;
+
+    var obstacleInfo = this.findPathAsteroid();
+    var obstacle = obstacleInfo.asteroid;
+    var avoidMode = false;
+
+    // 检查前方区域陨石密度
+    var forwardX = Math.cos((this.rot - 90) * Math.PI / 180);
+    var forwardY = Math.sin((this.rot - 90) * Math.PI / 180);
+    var asteroidCount = 0;
+    for (var i = 0; i < Game.sprites.length; i++) {
+      var s = Game.sprites[i];
+      if (!s.visible || s.name !== "asteroid") continue;
+      var dx = s.x - this.x;
+      var dy = s.y - this.y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      // 前方一定距离内
+      var dot = dx * forwardX + dy * forwardY;
+      if (dot > 0 && dist < 300) asteroidCount++;
+    }
+    // 高密度提前避开
+    if (asteroidCount >= 3) avoidMode = true;
+    // 或单个陨石距离很近
+    if (obstacle && obstacleInfo.distance < 150) avoidMode = true;
+
+    var targetAngle = shipAngle;
+    if (avoidMode && obstacle) {
+      var dx = obstacle.x - this.x;
+      var dy = obstacle.y - this.y;
+      var cross = dx * forwardY - dy * forwardX;
+      targetAngle = (Math.atan2(dy, dx) * 180 / Math.PI) + (cross > 0 ? 180 : 0);
+    }
+
+    var angleDiff = this.normalizeAngle(targetAngle - this.rot);
+    if (angleDiff > 4) {
+      this.vel.rot = GameConfig.fighterTurnSpeed;
+    } else if (angleDiff < -4) {
+      this.vel.rot = -GameConfig.fighterTurnSpeed;
+    } else {
+      this.vel.rot = 0;
+    }
+
+    var accelStrength = avoidMode ? GameConfig.fighterAvoidAccel : GameConfig.fighterAccel;
+    if (!hasShip) {
+      accelStrength = GameConfig.fighterIdleAccel;
+    }
+    var rad = ((this.rot - 90) * Math.PI) / 180;
+    this.acc.x = accelStrength * Math.cos(rad);
+    this.acc.y = accelStrength * Math.sin(rad);
+
+    var speed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
+    if (speed > GameConfig.fighterMaxSpeed) {
+      this.vel.x *= 0.95;
+      this.vel.y *= 0.95;
+    }
+
+    if (this.bulletBurstGapCounter > 0) {
+      this.bulletBurstGapCounter -= delta;
+    }
+    if (this.bulletBurstPauseCounter > 0) {
+      this.bulletBurstPauseCounter -= delta;
+    }
+
+    var canShootShip = hasShip && shipDist < 640 && Math.abs(this.normalizeAngle(shipAngle - this.rot)) < 36;
+    var canShootAsteroid = obstacle && obstacleInfo.distance < GameConfig.fighterAsteroidShootRange && Math.abs(angleDiff) < 60;
+
+    // 如果当前没有子弹在连射中，且间隔已到，并且有合适的目标，则开始新一轮连射
+    if (this.bulletBurstShotsLeft <= 0 && this.bulletBurstPauseCounter <= 0 && (canShootShip || canShootAsteroid)) {
+      this.bulletBurstShotsLeft = GameConfig.enemyBulletBurstCount;
+      this.bulletBurstGapCounter = 0;
+    }
+
+    if (this.bulletBurstShotsLeft > 0 && this.bulletBurstGapCounter <= 0) {
+      this.fireBullet();
+      this.bulletBurstShotsLeft--;
+      this.bulletBurstGapCounter = GameConfig.enemyBulletBurstShotInterval;
+      if (this.bulletBurstShotsLeft <= 0) {
+        this.bulletBurstPauseCounter = GameConfig.enemyBulletBurstPause;
+      }
+    }
+
+    if (this.missileCooldown > 0) {
+      this.missileCooldown -= delta;
+    }
+    if (hasShip && this.missileCooldown <= 0 && shipDist < 520 && Math.abs(this.normalizeAngle(shipAngle - this.rot)) < 42) {
+      this.missileCooldown = GameConfig.enemyMissileCooldown;
+      this.fireMissile();
+    }
+  };
+
+  this.collision = function (other) {
+    if (!this.visible) return;
+    if (other.name === "bullet" || other.name === "missile") {
+      Game.score += 260;
+    }
+    SFX.explosion();
+    Game.explosionAt(this.x, this.y);
+    this.visible = false;
+    if (this.currentNode) {
+      this.currentNode.leave(this);
+      this.currentNode = null;
+    }
+    // Game.nextFighterTime = Date.now() + 6000 + (Math.random() * 4000);
+  };
+};
+Fighter.prototype = new Sprite();
+
 // 小行星可分裂并计分
 Asteroid = function () {
-  this.init("asteroid",
-    [-10, 0,
-    -5, 7,
-    -3, 4,
-      1, 10,
-      5, 4,
-      10, 0,
-      5, -6,
-      2, -10,
-    -4, -10,
-    -4, -5]);
+  var Shapes = [
+    // 原有的形状
+    [-10, 0,  -5, 7,  -3, 4,  1, 10,  5, 4,  10, 0,  5, -6,  2, -10,  -4, -10,  -4, -5],
+
+    // 狭长碎片型 - 像断裂的矛头，左右跨度大
+    [-12, 2,  -6, 9,  -2, 5,  4, 12,  11, 3,  13, -4,  5, -7,  2, -11,  -3, -6,  -9, -5],
+
+    // 厚重钝角型 - 整体比较方正宽大，凹陷较浅，像一块未完全碎裂的巨石，给人“血量很高”的感觉
+    [-11, 3,  -7, 10,  0, 6,  7, 10,  12, 4,  10, -5,  6, -3,  2, -11,  -5, -9,  -8, -3],
+
+    // 深度残缺型 - 有一两个极其夸张的深凹陷，模拟被其他陨石撞击后缺了一大块的样子
+    [-10, 5,  -5, 12,  -1, 5,  5, 10,  11, 6,  13, -3,  6, 0,  5, -9,  -2, -11,  -6, -5],
+
+    // 锋利燧石型 - 右侧极度尖锐，整体呈现不规则的箭头状，适合作为高速飞行的陨石
+    [-11, 2,  -6, 8,  -2, 4,  3, 11,  7, 5,  12, 0,  7, -6,  1, -11,  -4, -8,  -9, -3]
+  ];
+  var shape = Shapes[Math.floor(Math.random() * Shapes.length)];
+  this.init("asteroid", shape);
 
   this.visible = true;
   this.scale = 6;
   this.postMove = this.wrapPostMove;
   this.spawnTime = Date.now();
 
-  this.collidesWith = ["ship", "bullet", "bigalien", "alienbullet", "missile"];
+  this.collidesWith = [
+    "ship", "bullet", "bigalien", "alienbullet", "missile",
+    "fighter", "fighterbullet", "fightermissile"
+  ];
 
   // 命中时分裂、计分并爆炸
   this.collision = function (other) {
@@ -1072,7 +1618,7 @@ Explosion = function () {
 Explosion.prototype = new Sprite();
 
 // 导弹爆炸特效：更多粒子线段 + 扩散环
-MissileExplosion = function () {
+MissileExplosion = function (explosionRadius) {
   this.init("missileexplosion");
 
   this.bridgesH = false;
@@ -1099,10 +1645,13 @@ MissileExplosion = function () {
         this.context.lineTo(line[2], line[3]);
       }
       this.context.stroke();
-      // 扩散环
+      // 扩散环渐变
+      var alpha = Math.max(0, 1 - (this.scale - 1) / 13);
       this.context.beginPath();
-      this.context.arc(0, 0, 5, 0, 2 * Math.PI);
+      this.context.globalAlpha = alpha;
+      this.context.arc(0, 0, explosionRadius / this.scale, 0, 2 * Math.PI);
       this.context.stroke();
+      this.context.globalAlpha = 1;
       this.context.restore();
     }
   };
@@ -1252,19 +1801,12 @@ for (var key in SFX) {
   if (key === 'muted') continue;
   (function (name) {
     var audio = SFX[name];
-    var originalPlay = audio.play;
-    // 覆盖为函数调用形式 SFX.laser()
+    // 覆盖为函数调用形式如 SFX.laser()
     SFX[name] = function () {
       if (!SFX.muted) {
         try {
-          if (audio.currentTime > 0) {
-            audio.currentTime = 0;
-          }
-          // 忽略自动播放策略阻挡等错误
-          var promise = audio.play();
-          if (promise !== undefined) {
-            promise.catch(function (error) { });
-          }
+          if (audio.currentTime > 0) audio.currentTime = 0;
+          audio.play();
         } catch (e) { }
       }
       return audio;
@@ -1277,6 +1819,7 @@ Game = {
   score: 0,
   totalAsteroids: 5,
   lives: 0,
+  lifeSegmentDamage: 0, // 当前最左生命已消耗的 1/3 段数（0~2）
 
   canvasWidth: 800,
   canvasHeight: 600,
@@ -1284,8 +1827,10 @@ Game = {
   sprites: [],
   ship: null,
   bigAlien: null,
+  fighter: null,
 
   nextBigAlienTime: null,
+  nextFighterTime: null,
 
 
   // 在空区域生成一波小行星
@@ -1319,18 +1864,31 @@ Game = {
   },
 
   // 在指定位置生成导弹爆炸效果（更大范围）
-  missileExplosionAt: function (x, y) {
-    var splosion = new MissileExplosion();
+  missileExplosionAt: function (x, y, radius) {
+    var splosion = new MissileExplosion(radius);
     splosion.x = x;
     splosion.y = y;
     splosion.visible = true;
     Game.sprites.push(splosion);
   },
 
+  // 每次受击仅消耗 1/3 条命，累计 3 次才扣 1 条完整生命
+  consumeLifeSegment: function () {
+    this.lifeSegmentDamage++;
+    if (this.lifeSegmentDamage >= 3) {
+      this.lifeSegmentDamage = 0;
+      this.lives--;
+      return true;
+    }
+    return false;
+  },
+
   // 游戏流程的简单状态机
   FSM: {
+    // 初始化，实际上直接进入waiting状态
     boot: function () {
-      Game.spawnAsteroids(8); // 增加背景小行星数量
+      Game.spawnAsteroids(7);
+      Game.fighter.spawn(true);
       this.state = 'waiting';
     },
     // 标题等待状态
@@ -1348,17 +1906,22 @@ Game = {
           Game.sprites[i].die();
         } else if (Game.sprites[i].name == 'bullet' ||
           Game.sprites[i].name == 'bigalien' ||
-          Game.sprites[i].name == 'missile') {
+          Game.sprites[i].name == 'missile' ||
+          Game.sprites[i].name == 'fighter' ||
+          Game.sprites[i].name == 'fighterbullet' ||
+          Game.sprites[i].name == 'fightermissile') {
           Game.sprites[i].visible = false;
         }
       }
 
       Game.score = 0;
       Game.lives = GameConfig.startLives;
+      Game.lifeSegmentDamage = 0;
       Game.totalAsteroids = GameConfig.startAsteroids;
       Game.spawnAsteroids();
 
-      Game.nextBigAlienTime = Date.now() + 30000 + (30000 * Math.random());
+      Game.nextBigAlienTime = Date.now() + 10000 + (10000 * Math.random());
+      Game.nextFighterTime = Date.now() + GameConfig.fighterFirstSpawnDelay + (0.5 * GameConfig.fighterFirstSpawnDelay * Math.random());
 
       this.state = 'spawn_ship';
     },
@@ -1387,7 +1950,14 @@ Game = {
       if (!Game.bigAlien.visible &&
         Date.now() > Game.nextBigAlienTime) {
         Game.bigAlien.visible = true;
-        Game.nextBigAlienTime = Date.now() + (30000 * Math.random());
+        Game.nextBigAlienTime = Date.now() + (15000 * Math.random());
+      }
+
+      if (!Game.fighter.visible &&
+        Game.nextFighterTime != null &&
+        Date.now() > Game.nextFighterTime) {
+        Game.fighter.spawn();
+        Game.nextFighterTime = Date.now() + GameConfig.fighterSpawnInterval + (0.5 * GameConfig.fighterSpawnInterval * Math.random());
       }
     },
     // 波次间提升难度
@@ -1406,7 +1976,7 @@ Game = {
     },
     // 短暂停后重生或结束
     player_died: function () {
-      if (Game.lives < 0) {
+      if (Game.lives <= 0) {
         this.state = 'end_game';
       } else {
         if (this.timer == null) {
@@ -1445,6 +2015,7 @@ Game = {
 // 初始化画布、网格、精灵和主循环
 window.addEventListener('DOMContentLoaded', function () {
   var canvas = document.getElementById('canvas');
+  var container = document.querySelector('.container');
   // 应用配置尺寸
   canvas.width = GameConfig.width;
   canvas.height = GameConfig.height;
@@ -1519,7 +2090,7 @@ window.addEventListener('DOMContentLoaded', function () {
   sprites.push(ship);
 
   ship.bullets = [];
-  for (var i = 0; i < 10; i++) {
+  for (var i = 0; i < GameConfig.playerMaxBullets; i++) {
     var bull = new Bullet();
     ship.bullets.push(bull);
     sprites.push(bull);
@@ -1538,6 +2109,11 @@ window.addEventListener('DOMContentLoaded', function () {
   sprites.push(bigAlien);
   Game.bigAlien = bigAlien;
 
+  var fighter = new Fighter();
+  fighter.setup();
+  sprites.push(fighter);
+  Game.fighter = fighter;
+
   var extraDude = new Ship();
   extraDude.scale = 0.6;
   extraDude.visible = true;
@@ -1548,6 +2124,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
   var paused = false;
   var showFramerate = false;
+  var showPlayerUi = true;
   var avgFramerate = 0;
   var frameCount = 0;
   var elapsedCounter = 0;
@@ -1578,6 +2155,21 @@ window.addEventListener('DOMContentLoaded', function () {
     context.clearRect(0, 0, Game.canvasWidth, Game.canvasHeight);
 
     Game.FSM.execute();
+
+    if (container) {
+      var panelVisible = paused || Game.FSM.state === 'waiting' || Game.FSM.state === 'boot';
+      container.classList.toggle('show-panels', panelVisible);
+    }
+
+    // 更新右侧面板状态显示
+    function setStatus(id, value) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+    setStatus('status-mute', SFX && SFX.muted ? '开' : '关');
+    setStatus('status-framerate', showFramerate ? '开' : '关');
+    setStatus('status-grid', KEY_STATUS.grid ? '开' : '关');
+    setStatus('status-playerui', showPlayerUi ? '开' : '关');
 
     // 可选网格调试层
     if (KEY_STATUS.g) {
@@ -1621,14 +2213,74 @@ window.addEventListener('DOMContentLoaded', function () {
       extraDude.y = 32;
       extraDude.configureTransform();
       extraDude.draw();
+
+      // 最左生命图标按 1/3、2/3 逐步从下往上涂黑
+      if (i === Game.lives - 1 && Game.lifeSegmentDamage > 0) {
+        var triBottom = 4;
+        var triTop = -12;
+        var triHeight = triBottom - triTop;
+        var fillStartY = triBottom - (Game.lifeSegmentDamage / 3) * triHeight;
+
+        context.save();
+        context.beginPath();
+        context.moveTo(-5, 4);
+        context.lineTo(0, -12);
+        context.lineTo(5, 4);
+        context.closePath();
+        context.clip();
+        context.fillStyle = '#000000';
+        context.fillRect(-6, fillStartY, 12, triBottom - fillStartY);
+        context.restore();
+      }
+
       context.restore();
     }
 
-    // 帧率显示（F 切换）
+    // 帧率显示（F 切换，左上角）
     if (showFramerate) {
       context.save();
       context.fillStyle = '#000000';
-      Text.renderText('' + avgFramerate, 24, Game.canvasWidth - 38, Game.canvasHeight - 20);
+      var fpsText = '' + avgFramerate;
+      Text.renderText(fpsText, 22, (10 * fpsText.length), 42);
+      context.restore();
+    }
+
+    // 速度/子弹UI（J 切换）
+    if (showPlayerUi) {
+      var currentSpeed = 0;
+      if (Game.ship && Game.ship.visible) {
+        currentSpeed = Math.sqrt(Game.ship.vel.x * Game.ship.vel.x + Game.ship.vel.y * Game.ship.vel.y);
+      }
+
+      var speedInt = Math.round(currentSpeed);
+
+      context.save();
+      context.fillStyle = '#000000';
+
+      Text.renderText('' + speedInt, 18, 10, Game.canvasHeight - 20);
+
+      var availableBullets = 0;
+      if (Game.ship && Game.ship.bullets) {
+        for (var bi = 0; bi < Game.ship.bullets.length; bi++) {
+          if (!Game.ship.bullets[bi].visible) {
+            availableBullets++;
+          }
+        }
+      }
+      var bulletUiText = availableBullets + '/' + GameConfig.playerMaxBullets;
+      Text.renderText(bulletUiText, 18, Game.canvasWidth - (14 * bulletUiText.length) - 8, Game.canvasHeight - 20);
+
+      var barMaxHeight = Math.floor(Game.canvasHeight / 4);
+      var barWidth = 4;
+      var speedFullScale = 12;
+
+      if (speedInt > 0) {
+        var speedBarHeight = Math.min(barMaxHeight, Math.round((currentSpeed / speedFullScale) * barMaxHeight));
+        if (speedBarHeight > 0) {
+          context.fillRect(0, Game.canvasHeight - speedBarHeight, barWidth, speedBarHeight);
+        }
+      }
+
       context.restore();
     }
 
@@ -1656,7 +2308,11 @@ window.addEventListener('DOMContentLoaded', function () {
       case 'framerate': // 显示帧率
         showFramerate = !showFramerate;
         break;
+      case 'playerui': // 速度/子弹UI
+        showPlayerUi = !showPlayerUi;
+        break;
       case 'pause': // 暂停
+        if (Game.FSM.state === 'waiting') break; // 标题界面不允许暂停
         paused = !paused;
         if (!paused) {
           // 继续运行
