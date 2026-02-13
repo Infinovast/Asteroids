@@ -15,7 +15,21 @@
 
     <div class="info-panel left-panel">
       <h2>Asteroids</h2>
-      <p>击碎行星会产生大量小行星。消灭所有小行星，避免碰撞，获得高分。</p>
+      <p>
+        击碎行星会产生大量小行星。<br>
+        消灭敌人和小行星，避免碰撞，在耗尽生命前分数>20000即为胜利。<br>
+        <br>
+        <em><strong>注意：</strong>受浏览器安全策略影响，如遇异常静音，请按任意键来激活网页。</em>
+      </p>
+      <div class="schematic-container">
+        <svg viewBox="0 0 180 110">
+          <rect x="10" y="10" width="160" height="90" rx="10" fill="none" stroke="#888" stroke-width="2" />
+          <text x="21" y="26" font-size="10" fill="#888">刷新率</text>
+          <text x="161" y="26" font-size="10" fill="#888" text-anchor="end">分数 & 生命</text>
+          <text x="21" y="90" font-size="10" fill="#888">速度计</text>
+          <text x="161" y="90" font-size="10" fill="#888" text-anchor="end">机炮弹量</text>
+        </svg>
+      </div>
     </div>
 
     <div class="info-panel right-panel">
@@ -26,9 +40,10 @@
         ↓ / S：减速<br>
         <br>
         Space：机炮 + 导弹<br>
-        Q / Z：导弹<br>
+        Q：导弹<br>
         <br>
         Esc / P：暂停（唤出菜单）<br>
+        N：切换深色模式【<span id="status-darkmode">--</span>】<br>
         M：静音【<span id="status-mute">--</span>】<br>
         F：显示刷新率【<span id="status-framerate">--</span>】<br>
         G：显示碰撞箱【<span id="status-grid">--</span>】<br>        

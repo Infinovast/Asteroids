@@ -5,10 +5,10 @@ var GameConfig = {
   startLives: 6,    // 初始生命值
   startAsteroids: 6, // 初始陨石数量
 
-  bulletSpeed: 20,   // 子弹速度
-  playerMaxBullets: 15, // 同时存在的玩家子弹最大值
-  playerBulletCooldown: 1, // 玩家机炮发射间隔（帧）
-  playerBulletBurstCount: 2, // 玩家机炮每轮连发数
+  bulletSpeed: 17,   // 子弹速度
+  playerMaxBullets: 10, // 同时存在的玩家子弹最大值
+  playerBulletCooldown: 3, // 玩家机炮发射间隔（帧）
+  playerBulletBurstCount: 3, // 玩家机炮每轮连发数
   playerBulletBurstShotInterval: 0, // 玩家机炮连发内间隔（帧）
   bulletLifetime: 50, // 子弹寿命（帧数）
   playerMissileCooldown: 50, // 玩家导弹发射间隔（帧）
@@ -16,12 +16,13 @@ var GameConfig = {
   playerAccel: 0.5, // 玩家推进加速度
   playerBrakeAccel: 0.1, // 玩家刹车加速度
   playerRotSpeed: 7, // 玩家旋转速度
-  alienBulletLifetime: 65, // 外星子弹寿命（帧数）
-  missileSpeed: 26,  // 导弹速度
-  missileLifetime: 25, // 导弹寿命（帧数）
+  missileSpeed: 24,  // 导弹速度
+  missileLifetime: 35, // 导弹寿命（帧数）
   missileTrackingRange: 170, // 导弹追踪范围
   missileTurnRate: 12, // 导弹转向速度
-  missileExplosionRadius: 70, // 导弹爆炸半径
+  missileExplosionRadius: 65, // 导弹爆炸半径
+
+  ufoMissileInterval: 80, // UFO导弹发射间隔（帧）
 
   fighterFirstSpawnDelay: 11000, // 敌机首次生成延迟(ms)
   fighterSpawnInterval: 10000,   // 敌机生成基础间隔(ms)
@@ -40,10 +41,10 @@ var GameConfig = {
   enemyMissileCooldown: 99, // 敌机导弹发射间隔（帧）
   enemyMissileSpawnCooldown: 33, // 敌机生成后首发导弹间隔（帧）
   enemyMissileSpeed: 20, // 敌机导弹速度
-  enemyMissileLifetime: 25, // 敌机导弹寿命（帧数）
+  enemyMissileLifetime: 30, // 敌机导弹寿命（帧数）
   enemyMissileTrackingRange: 240, // 敌机导弹追踪范围
   enemyMissileTurnRate: 3, // 敌机导弹转向速度（更小）
-  enemyMissileExplosionRadius: 38, // 敌机导弹爆炸半径（更小）
+  enemyMissileExplosionRadius: 40, // 敌机导弹爆炸半径（更小）
 
   lightColor: '#fff', // 黑暗模式主色/亮色模式底色
   darkColor: '#000' // 黑暗模式底色/亮色模式主色
@@ -64,11 +65,10 @@ var KEY_CODES = {
   70: 'framerate',  // F键切换帧率显示（调试）
   71: 'grid',       // G键按住显示网格（调试）
   77: 'mute',       // M键静音
+  78: 'darkmode',    // N键黑暗模式
   80: 'pause',      // P键暂停
   81: 'missile',    // Q键导弹
-  85: 'playerui',   // U键开关速度/子弹UI
-  90: 'missile',    // Z键导弹
-  78: 'darkmode'   // N键黑暗模式
+  85: 'playerui'   // U键开关速度/子弹UI
 }
 
 // 记录动作按下状态
@@ -457,15 +457,16 @@ Ship = function () {
 
   this.postMove = this.wrapPostMove;
 
-  this.collidesWith = ["asteroid", "bigalien", "alienbullet"];
-  this.collidesWith.push("fighter", "fighterbullet", "fightermissile");
+  this.collidesWith = ["asteroid", "ufo", "fighter", "fighterbullet", "fightermissile"];
 
   this.fireBullet = function () {
+    const spread = 3; // 每颗子弹发射时添加±x°随机角度误差
     for (var i = 0; i < this.bullets.length; i++) {
       if (!this.bullets[i].visible) {
         SFX.laser();
         var bullet = this.bullets[i];
-        var rad = ((this.rot - 90) * Math.PI) / 180;
+        var error = (Math.random() * 2 - 1) * spread * (Math.PI / 180); // 生成±spread范围内的随机误差，转换为弧度
+        var rad = ((this.rot - 90) * Math.PI) / 180 + error;
         var vectorx = Math.cos(rad);
         var vectory = Math.sin(rad);
         bullet.x = this.x + vectorx * 4;
@@ -476,6 +477,16 @@ Ship = function () {
         break;
       }
     }
+  };
+
+  this.stopThrust = function () {
+    var thrustAudio = SFX.thrust();
+    try {
+      thrustAudio.pause();
+      thrustAudio.currentTime = 0;
+      thrustAudio.loop = false;
+    } catch (e) { }
+    this.thrustPlaying = false;
   };
 
   // 读取输入并转为旋转、推进和射击
@@ -491,13 +502,7 @@ Ship = function () {
 
     // 停止停止推进音效
     if (!KEY_STATUS.up) {
-      var thrustStopAudio = SFX.thrust();
-      try {
-        thrustStopAudio.pause();
-        thrustStopAudio.currentTime = 0;
-        thrustStopAudio.loop = false;
-      } catch (e) { }
-      this.thrustPlaying = false;
+      this.stopThrust();
     }
 
     // 前进推进
@@ -507,9 +512,7 @@ Ship = function () {
         var thrustAudio = SFX.thrust();
         try {
           thrustAudio.loop = true;
-          if (thrustAudio.duration > 0) {
-            thrustAudio.currentTime = Math.random() * thrustAudio.duration;
-          }
+          thrustAudio.currentTime = Math.random() * thrustAudio.duration;
           var playPromise = thrustAudio.play();
           if (playPromise !== undefined) {
             playPromise.catch(function () { });
@@ -649,22 +652,16 @@ Ship = function () {
 
     Game.FSM.state = 'player_died';
     this.visible = false;
+    SFX.boom();
     if (this.currentNode) {
       this.currentNode.leave(this);
       this.currentNode = null;
     }
-    if (this.thrustPlaying) {   // 真死时强制停止推进音效
-      var thrustStopAudio = SFX.thrust();
-      try {
-        thrustStopAudio.pause();
-        thrustStopAudio.currentTime = 0;
-        thrustStopAudio.loop = false;
-      } catch (e) { }
-      this.thrustPlaying = false;
-    }
+    if (this.thrustPlaying)  // 真死时强制停止推进音效
+      this.stopThrust();
+
     for (var i = 0; i < Game.sprites.length; i++) {
-      if (Game.sprites[i].name === 'alienbullet' ||
-        Game.sprites[i].name === 'fighterbullet' ||
+      if (Game.sprites[i].name === 'fighterbullet' ||
         Game.sprites[i].name === 'fightermissile') {
         Game.sprites[i].visible = false;
       }
@@ -674,9 +671,9 @@ Ship = function () {
 };
 Ship.prototype = new Sprite();
 
-// 大型 UFO：简单 AI 移动与射击
-BigAlien = function () {
-  this.init("bigalien",
+// UFO：左右屏外生成，调整上下移动，朝玩家开火
+UFO = function () {
+  this.init("ufo",
     [-20, 0,
     -12, -4,
       12, -4,
@@ -687,7 +684,7 @@ BigAlien = function () {
       20, 0]);
 
   this.children.top = new Sprite();
-  this.children.top.init("bigalien_top",
+  this.children.top.init("ufo_top",
     [-8, -4,
     -6, -6,
       6, -6,
@@ -695,7 +692,7 @@ BigAlien = function () {
   this.children.top.visible = true;
 
   this.children.bottom = new Sprite();
-  this.children.bottom.init("bigalien_top",
+  this.children.bottom.init("ufo_top",
     [8, 4,
       6, 6,
       -6, 6,
@@ -706,8 +703,8 @@ BigAlien = function () {
 
   this.bridgesH = false;
 
-  this.bullets = [];
-  this.bulletCounter = 0;
+  this.missiles = [];
+  this.missileCounter = 0;
 
   // 从左右屏外生成
   this.newPosition = function () {
@@ -721,18 +718,17 @@ BigAlien = function () {
     this.y = Math.random() * Game.canvasHeight;
   };
 
-  // 预创建子弹复用
+  // 预创建导弹复用
   this.setup = function () {
     this.newPosition();
-
-    for (var i = 0; i < 3; i++) {
-      var bull = new AlienBullet();
-      this.bullets.push(bull);
-      Game.sprites.push(bull);
+    for (var i = 0; i < 2; i++) {
+      var missile = new FighterMissile();
+      this.missiles.push(missile);
+      Game.sprites.push(missile);
     }
   };
 
-  // 根据附近密度调整上下移动
+  // 根据附近密度调整上下移动，并发射导弹
   this.preMove = function (delta) {
     var cn = this.currentNode;
     if (cn == null) return;
@@ -755,38 +751,38 @@ BigAlien = function () {
       this.vel.y = -this.vel.y;
     }
 
-    // 朝玩家开火
-    this.bulletCounter -= delta;
-    if (this.bulletCounter <= 0) {
-      this.bulletCounter = 22;
+    // 发射导弹（只追踪玩家）
+    this.missileCounter -= delta;
+    if (this.missileCounter <= 0) {
+      this.missileCounter = GameConfig.ufoMissileInterval; // 间隔可调整
       if (!Game.ship.visible) {
         return;
       }
-      for (var i = 0; i < this.bullets.length; i++) {
-        if (!this.bullets[i].visible) {
-          bullet = this.bullets[i];
+      for (var i = 0; i < this.missiles.length; i++) {
+        if (!this.missiles[i].visible) {
+          var missile = this.missiles[i];
           var dx = Game.ship.x - this.x;
           var dy = Game.ship.y - this.y;
           var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist === 0 || !Game.ship.visible) {
-            dist = 1;
-          }
+          if (dist === 0) dist = 1;
           var vectorx = dx / dist;
           var vectory = dy / dist;
-          bullet.x = this.x;
-          bullet.y = this.y;
-          bullet.vel.x = 6 * vectorx;
-          bullet.vel.y = 6 * vectory;
-          bullet.visible = true;
+          missile.x = this.x;
+          missile.y = this.y;
+          missile.vel.x = missile.speed * vectorx;
+          missile.vel.y = missile.speed * vectory;
+          missile.rot = Math.atan2(vectory, vectorx) * 180 / Math.PI + 90;
+          missile.visible = true;
+          missile.time = 0;
+          missile.target = Game.ship;
           SFX.laser();
           break;
         }
       }
     }
-
   };
 
-  BigAlien.prototype.collision = function (other) {
+  UFO.prototype.collision = function (other) {
     if (other.name == "bullet" || other.name == "missile") Game.score += 200;
     SFX.explosion();
     Game.explosionAt(other.x, other.y);
@@ -809,9 +805,9 @@ BigAlien = function () {
     }
   }
 };
-BigAlien.prototype = new Sprite();
+UFO.prototype = new Sprite();
 
-// 玩家子弹：短生命周期
+// 玩家子弹
 Bullet = function () {
   this.init("bullet", [0, 0]);
   this.time = 0;
@@ -834,7 +830,7 @@ Bullet = function () {
       this.context.restore();
     }
   };
-  // 子弹快速失效以限制数量
+  // 子弹失效以限制数量
   this.preMove = function (delta) {
     if (this.visible) {
       this.time += delta;
@@ -857,35 +853,6 @@ Bullet = function () {
 };
 Bullet.prototype = new Sprite();
 
-// 外星子弹复用子弹寿命逻辑
-AlienBullet = function () {
-  this.init("alienbullet");
-
-  this.preMove = function (delta) {
-    if (this.visible) {
-      this.time += delta;
-    }
-    if (this.time > GameConfig.enemyBulletLifetime) {
-      this.visible = false;
-      this.time = 0;
-    }
-  };
-
-  this.draw = function () {
-    if (this.visible) {
-      this.context.save();
-      this.context.lineWidth = 2;
-      this.context.strokeStyle = Game.primaryColor;
-      this.context.beginPath();
-      this.context.moveTo(this.x, this.y);
-      this.context.lineTo(this.x - this.vel.x, this.y - this.vel.y);
-      this.context.stroke();
-      this.context.restore();
-    }
-  };
-};
-AlienBullet.prototype = new Bullet();
-
 // 敌对战机机炮子弹
 FighterBullet = function () {
   this.init("fighterbullet");
@@ -894,7 +861,7 @@ FighterBullet = function () {
     if (this.visible) {
       this.time += delta;
     }
-    if (this.time > GameConfig.alienBulletLifetime) {
+    if (this.time > GameConfig.enemyBulletLifetime) {
       this.visible = false;
       this.time = 0;
     }
@@ -981,17 +948,17 @@ Missile = function () {
       this.target = null;
     }
 
-    // 仅当从未锁定目标时，先找最近的敌机
+    // 仅当从未锁定目标时，先找最近的敌机或ufo
     if (!this.target) {
       var nearestEnemyDist = Infinity;
       for (var i = 0; i < Game.sprites.length; i++) {
         var enemy = Game.sprites[i];
-        if (!enemy.visible || enemy.name !== "fighter") continue;
+        if (!enemy.visible || (enemy.name !== "fighter" && enemy.name !== "ufo")) continue;
         var ex = enemy.x - this.x;
         var ey = enemy.y - this.y;
 
-        var edot = this.vel.x * ex + this.vel.y * ey;
-        if (edot <= 0) continue;
+        var dot = this.vel.x * ex + this.vel.y * ey;
+        if (dot <= 0) continue;
 
         var edist = Math.sqrt(ex * ex + ey * ey);
         if (edist < nearestEnemyDist) {
@@ -1001,27 +968,25 @@ Missile = function () {
       }
     }
 
-    // 若没有敌机可锁定，再找其他目标
+    // 若没有敌机可锁定，再找陨石
     if (!this.target) {
       var nearestDist = Infinity;
       for (var i = 0; i < Game.sprites.length; i++) {
         var s = Game.sprites[i];
-        if (!s.visible) continue;
-        if (s.name === "asteroid" || s.name === "bigalien") {
-          var dx = s.x - this.x;
-          var dy = s.y - this.y;
+        if (!s.visible || s.name !== "asteroid") continue;
+        var dx = s.x - this.x;
+        var dy = s.y - this.y;
 
-          // 在前方约-80到80度扇形范围内寻找目标
-          // 利用点积与叉积限制搜索角度
-          var dot = this.vel.x * dx + this.vel.y * dy;
-          var cross = this.vel.x * dy - this.vel.y * dx;
-          if (dot <= 0 || Math.abs(cross) > dot * 5.7) continue;  // tan(70°)=2.747，tan(80°)=5.671，tan(85°)=11.43
+        // 在前方约-80到80度扇形范围内寻找目标
+        // 利用点积与叉积限制搜索角度
+        var dot = this.vel.x * dx + this.vel.y * dy;
+        var cross = this.vel.x * dy - this.vel.y * dx;
+        if (dot <= 0 || Math.abs(cross) > dot * 5.7) continue;  // tan(70°)=2.747，tan(80°)=5.671，tan(85°)=11.43
 
-          var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-            this.target = s;
-          }
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          this.target = s;
         }
       }
     }
@@ -1085,7 +1050,10 @@ Missile = function () {
     for (var i = 0; i < Game.sprites.length; i++) {
       var s = Game.sprites[i];
       if (!s.visible || s === directHit) continue;
-      if (s.name === "asteroid" || s.name === "bigalien") {
+      if (
+        s.name === "asteroid" || s.name === "ufo" ||
+        s.name === "fighter" || s.name === "fightermissile" || s.name === "fighterbullet"
+      ) {
         var dx = s.x - myX;
         var dy = s.y - myY;
         var dist = Math.sqrt(dx * dx + dy * dy);
@@ -1216,7 +1184,7 @@ FighterMissile = function () {
     for (var i = 0; i < Game.sprites.length; i++) {
       var s = Game.sprites[i];
       if (!s.visible) continue;
-      if (s.name === "ship" || s.name === "asteroid") {
+      if (s.name === "ship" || s.name === "asteroid" || s.name === "missile") {
         var dx = s.x - myX;
         var dy = s.y - myY;
         var dist = Math.sqrt(dx * dx + dy * dy);
@@ -1368,9 +1336,11 @@ Fighter = function () {
 
   this.fireBullet = function () {
     for (var i = 0; i < this.bullets.length; i++) {
+      const spread = 3; // 射击误差范围，单位为度
       if (!this.bullets[i].visible) {
         var bullet = this.bullets[i];
-        var rad = ((this.rot - 90) * Math.PI) / 180;
+        var error = (Math.random() * 2 - 1) * spread * (Math.PI / 180); // 生成±spread范围内的随机误差，转换为弧度
+        var rad = ((this.rot - 90) * Math.PI) / 180 + error;
         var vectorx = Math.cos(rad);
         var vectory = Math.sin(rad);
         bullet.x = this.x + vectorx * 4;
@@ -1496,7 +1466,14 @@ Fighter = function () {
     if (this.missileCooldown > 0) {
       this.missileCooldown -= delta;
     }
-    if (hasShip && this.missileCooldown <= 0 && shipDist < 520 && Math.abs(this.normalizeAngle(shipAngle - this.rot)) < 42) {
+    // 攻击玩家或陨石时都能发射导弹
+    if (
+      this.missileCooldown <= 0 &&
+      (
+        (hasShip && shipDist < 520 && Math.abs(this.normalizeAngle(shipAngle - this.rot)) < 42)
+        || canShootAsteroid
+      )
+    ) {
       this.missileCooldown = GameConfig.enemyMissileCooldown;
       this.fireMissile();
     }
@@ -1546,8 +1523,7 @@ Asteroid = function () {
   this.spawnTime = Date.now();
 
   this.collidesWith = [
-    "ship", "bullet", "bigalien", "alienbullet", "missile",
-    "fighter", "fighterbullet", "fightermissile"
+    "ship", "bullet", "missile", "ufo", "fighter", "fighterbullet", "fightermissile"
   ];
 
   // 命中时分裂、计分并爆炸
@@ -1806,6 +1782,7 @@ SFX = {
   laser: new Audio('assets/audio/laser.mp3'),
   explosion: new Audio('assets/audio/explosion.mp3'),
   thrust: new Audio('assets/audio/thrust.mp3'),
+  boom: new Audio('assets/audio/boom.mp3'),
   muted: false
 };
 
@@ -1836,15 +1813,15 @@ Game = {
 
   canvasWidth: 800,
   canvasHeight: 600,
-  primaryColor: GameConfig.darkColor,
-  secondaryColor: GameConfig.lightColor,
+  primaryColor: GameConfig.lightColor,
+  secondaryColor: GameConfig.darkColor,
 
   sprites: [],
   ship: null,
-  bigAlien: null,
+  ufo: null,
   fighter: null,
 
-  nextBigAlienTime: null,
+  nextUFOTime: null,
   nextFighterTime: null,
 
 
@@ -1902,6 +1879,8 @@ Game = {
   FSM: {
     // 初始化，实际上直接进入waiting状态
     boot: function () {
+      // // 游戏开始前没手动换亮色的话，默认配色按黑暗模式，这里标记一下
+      // if (Game.primaryColor === GameConfig.darkColor) document.body.classList.add('dark-mode');
       Game.spawnAsteroids(7);
       Game.fighter.spawn(true);
       this.state = 'waiting';
@@ -1909,6 +1888,9 @@ Game = {
     // 标题等待状态
     waiting: function () {
       Text.renderText('Press Space to Start', 36, Game.canvasWidth / 2 - 270, Game.canvasHeight / 2);
+      if (!Game.fighter.visible) {
+        Game.fighter.spawn(); // waiting 阶段敌机死后自动重生，用于展示
+      }
       if (KEY_STATUS.space) {
         KEY_STATUS.space = false; // 防止起手就开火
         this.state = 'start';
@@ -1920,7 +1902,7 @@ Game = {
         if (Game.sprites[i].name == 'asteroid') {
           Game.sprites[i].die();
         } else if (Game.sprites[i].name == 'bullet' ||
-          Game.sprites[i].name == 'bigalien' ||
+          Game.sprites[i].name == 'ufo' ||
           Game.sprites[i].name == 'missile' ||
           Game.sprites[i].name == 'fighter' ||
           Game.sprites[i].name == 'fighterbullet' ||
@@ -1935,7 +1917,7 @@ Game = {
       Game.totalAsteroids = GameConfig.startAsteroids;
       Game.spawnAsteroids();
 
-      Game.nextBigAlienTime = Date.now() + 10000 + (10000 * Math.random());
+      Game.nextUFOTime = Date.now() + 10000 + (10000 * Math.random());
       Game.nextFighterTime = Date.now() + GameConfig.fighterFirstSpawnDelay + (0.5 * GameConfig.fighterFirstSpawnDelay * Math.random());
 
       this.state = 'spawn_ship';
@@ -1962,10 +1944,10 @@ Game = {
       if (i == Game.sprites.length) {
         this.state = 'new_level';
       }
-      if (!Game.bigAlien.visible &&
-        Date.now() > Game.nextBigAlienTime) {
-        Game.bigAlien.visible = true;
-        Game.nextBigAlienTime = Date.now() + (15000 * Math.random());
+      if (!Game.ufo.visible &&
+        Date.now() > Game.nextUFOTime) {
+        Game.ufo.visible = true;
+        Game.nextUFOTime = Date.now() + (15000 * Math.random());
       }
 
       if (!Game.fighter.visible &&
@@ -2028,7 +2010,26 @@ Game = {
 
 
 // 初始化画布、网格、精灵和主循环
+// 监听 DOMContentLoaded 事件，确保在 HTML 元素加载完成后再执行初始化代码
 window.addEventListener('DOMContentLoaded', function () {
+  // 检测用户系统/浏览器偏好决定配色方案
+  function setDarkModeByPreference() {
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (prefersDark) {
+      Game.primaryColor = GameConfig.lightColor;
+      Game.secondaryColor = GameConfig.darkColor;
+      document.body.classList.add('dark-mode');
+    } else {
+      Game.primaryColor = GameConfig.darkColor;
+      Game.secondaryColor = GameConfig.lightColor;
+      document.body.classList.remove('dark-mode');
+    }
+  }
+  setDarkModeByPreference();
+  if (window.matchMedia) { // 监听系统/浏览器主题变化，动态切换配色
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeByPreference);
+  }
+
   var canvas = document.getElementById('canvas');
   var container = document.querySelector('.container');
   // 动态自适应尺寸
@@ -2054,7 +2055,6 @@ window.addEventListener('DOMContentLoaded', function () {
   resize();
 
   var context = canvas.getContext("2d");
-
   Text.context = context;
   Text.face = vector_battle;
 
@@ -2121,10 +2121,10 @@ window.addEventListener('DOMContentLoaded', function () {
   }
   Game.ship = ship;
 
-  var bigAlien = new BigAlien();
-  bigAlien.setup();
-  sprites.push(bigAlien);
-  Game.bigAlien = bigAlien;
+  var ufo = new UFO();
+  ufo.setup();
+  sprites.push(ufo);
+  Game.ufo = ufo;
 
   var fighter = new Fighter();
   fighter.setup();
@@ -2168,7 +2168,7 @@ window.addEventListener('DOMContentLoaded', function () {
   })();
 
   // 主渲染/更新循环
-  var mainLoop = function (onlyRender) {
+  var mainLoop = function () {
     // 根据模式设置底色
     context.fillStyle = Game.secondaryColor;
     context.fillRect(0, 0, Game.canvasWidth, Game.canvasHeight);
@@ -2186,6 +2186,7 @@ window.addEventListener('DOMContentLoaded', function () {
       var el = document.getElementById(id);
       if (el) el.textContent = value;
     }
+    setStatus('status-darkmode', document.body.classList.contains('dark-mode') ? '开' : '关');
     setStatus('status-mute', SFX && SFX.muted ? '开' : '关');
     setStatus('status-framerate', showFramerate ? '开' : '关');
     setStatus('status-grid', KEY_STATUS.grid ? '开' : '关');
@@ -2206,29 +2207,25 @@ window.addEventListener('DOMContentLoaded', function () {
       context.stroke();
     }
 
-    if (onlyRender) {
-      // 只渲染，不更新位置
-      for (i = 0; i < sprites.length; i++) {
-        if (sprites[i].visible && typeof sprites[i].draw === 'function') {
-          sprites[i].draw();
-        }
-      }
-      console.warn('只渲染，不更新位置');
-    } else {
+    if (paused) { // 仅渲染，不刷新位置
+      delta = 0;
+      console.warn('仅渲染');
+    }
+    else {
       thisFrame = Date.now();
       elapsed = thisFrame - lastFrame;
       lastFrame = thisFrame;
       delta = elapsed / 30;
-      for (i = 0; i < sprites.length; i++) {
-        sprites[i].run(delta);
-        if (sprites[i].reap) {
-          sprites[i].reap = false;
-          sprites.splice(i, 1);
-          i--;
-        }
+      // console.log('正常更新位置，delta:', delta);
+    }
+    for (i = 0; i < sprites.length; i++) {
+      sprites[i].run(delta);
+      if (sprites[i].reap) {
+        sprites[i].reap = false;
+        sprites.splice(i, 1);
+        i--;
       }
-        console.warn('正常更新位置并渲染');
-      } 
+    }
 
     // 分数显示
     var score_text = '' + Game.score;
@@ -2311,18 +2308,19 @@ window.addEventListener('DOMContentLoaded', function () {
       context.restore();
     }
 
-    frameCount++;
-    elapsedCounter += elapsed;
-    if (elapsedCounter > 1000) {
-      elapsedCounter -= 1000;
-      avgFramerate = frameCount;
-      frameCount = 0;
-    }
-
     // 暂停显示与循环控制
     if (paused) {
       Text.renderText('PAUSED', 72, Game.canvasWidth / 2 - 160, 120);
     } else {
+      // 计算平均帧率
+      frameCount++;
+      elapsedCounter += elapsed;
+      if (elapsedCounter > 1000) {
+        elapsedCounter -= 1000;
+        avgFramerate = frameCount;
+        frameCount = 0;
+      }
+      // 继续下一帧
       requestAnimFrame(mainLoop, canvasNode);
     }
   };
@@ -2331,12 +2329,17 @@ window.addEventListener('DOMContentLoaded', function () {
 
   // 使用 keyup 防止按住按键反复触发切换
   window.addEventListener('keyup', function (e) {
+    var mutedBeforePause;
     switch (KEY_CODES[e.keyCode]) {
       case 'pause': // 暂停
         if (Game.FSM.state === 'waiting') break; // 标题界面不允许暂停
         paused = !paused;
-        if (!paused) {
-          // 继续运行
+        if (paused) {
+          mutedBeforePause = SFX.muted;
+          SFX.muted = true; // 暂停时强制静音
+          ship.stopThrust(); // 停止thrust音效
+        } else {  // 继续运行
+          SFX.muted = mutedBeforePause; // 恢复暂停前的静音状态
           lastFrame = Date.now();
           mainLoop();
         }
@@ -2351,15 +2354,16 @@ window.addEventListener('DOMContentLoaded', function () {
         SFX.muted = !SFX.muted;
         break;
       case 'darkmode': // 暗黑模式
-        document.body.classList.toggle('dark-mode');
         if (Game.primaryColor === GameConfig.darkColor) {
           Game.primaryColor = GameConfig.lightColor;
           Game.secondaryColor = GameConfig.darkColor;
+          document.body.classList.add('dark-mode');
         } else {
           Game.primaryColor = GameConfig.darkColor;
           Game.secondaryColor = GameConfig.lightColor;
+          document.body.classList.remove('dark-mode');
         }
-        if (paused) mainLoop(true); // 如果处于暂停状态，立即重新渲染当前帧
+        if (paused) mainLoop(); // 如果暂停时切换黑白，立即重新仅渲染
         break;
     }
   });
