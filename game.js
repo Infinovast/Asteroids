@@ -43,7 +43,10 @@ var GameConfig = {
   enemyMissileLifetime: 25, // 敌机导弹寿命（帧数）
   enemyMissileTrackingRange: 240, // 敌机导弹追踪范围
   enemyMissileTurnRate: 3, // 敌机导弹转向速度（更小）
-  enemyMissileExplosionRadius: 38 // 敌机导弹爆炸半径（更小）
+  enemyMissileExplosionRadius: 38, // 敌机导弹爆炸半径（更小）
+
+  lightColor: '#fff', // 黑暗模式主色/亮色模式底色
+  darkColor: '#000' // 黑暗模式底色/亮色模式主色
 };
 
 // 输入映射到游戏动作
@@ -64,7 +67,8 @@ var KEY_CODES = {
   80: 'pause',      // P键暂停
   81: 'missile',    // Q键导弹
   85: 'playerui',   // U键开关速度/子弹UI
-  90: 'missile'     // Z键导弹
+  90: 'missile',    // Z键导弹
+  78: 'darkmode'   // N键黑暗模式
 }
 
 // 记录动作按下状态
@@ -271,7 +275,7 @@ Sprite = function () {
       this.context.lineWidth = 3.0;
       this.context.strokeStyle = 'green';
       this.context.strokeRect(gridx * GRID_SIZE + 2, gridy * GRID_SIZE + 2, GRID_SIZE - 4, GRID_SIZE - 4);
-      this.context.strokeStyle = 'black';
+      this.context.strokeStyle = Game.primaryColor;
       this.context.lineWidth = 1.0;
     }
   };
@@ -288,7 +292,7 @@ Sprite = function () {
     if (!this.visible) return;
 
     this.context.lineWidth = 1.0 / this.scale;
-
+    this.context.strokeStyle = Game.primaryColor;
     for (child in this.children) {
       this.children[child].draw();
     }
@@ -488,12 +492,12 @@ Ship = function () {
     // 停止停止推进音效
     if (!KEY_STATUS.up) {
       var thrustStopAudio = SFX.thrust();
-        try {
-          thrustStopAudio.pause();
-          thrustStopAudio.currentTime = 0;
-          thrustStopAudio.loop = false;
-        } catch (e) { }
-        this.thrustPlaying = false;
+      try {
+        thrustStopAudio.pause();
+        thrustStopAudio.currentTime = 0;
+        thrustStopAudio.loop = false;
+      } catch (e) { }
+      this.thrustPlaying = false;
     }
 
     // 前进推进
@@ -518,7 +522,7 @@ Ship = function () {
       this.acc.y = GameConfig.playerAccel * Math.sin(rad);
       this.children.exhaust.visible = Math.random() > 0.1;
       // 逆向刹车（弱于推进）
-    }else if (KEY_STATUS.down) {
+    } else if (KEY_STATUS.down) {
       var speed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
       if (speed > 0) {
         var brakeAccel = GameConfig.playerBrakeAccel;
@@ -529,7 +533,7 @@ Ship = function () {
         this.acc.y = 0;
       }
       this.children.exhaust.visible = false;
-    }else {
+    } else {
       this.acc.x = 0;
       this.acc.y = 0;
       this.children.exhaust.visible = false;
@@ -651,12 +655,12 @@ Ship = function () {
     }
     if (this.thrustPlaying) {   // 真死时强制停止推进音效
       var thrustStopAudio = SFX.thrust();
-        try {
-          thrustStopAudio.pause();
-          thrustStopAudio.currentTime = 0;
-          thrustStopAudio.loop = false;
-        } catch (e) { }
-        this.thrustPlaying = false;
+      try {
+        thrustStopAudio.pause();
+        thrustStopAudio.currentTime = 0;
+        thrustStopAudio.loop = false;
+      } catch (e) { }
+      this.thrustPlaying = false;
     }
     for (var i = 0; i < Game.sprites.length; i++) {
       if (Game.sprites[i].name === 'alienbullet' ||
@@ -820,6 +824,7 @@ Bullet = function () {
     if (this.visible) {
       this.context.save();
       this.context.lineWidth = 2;
+      this.context.strokeStyle = Game.primaryColor;
       this.context.beginPath();
       this.context.moveTo(this.x - 1, this.y - 1);
       this.context.lineTo(this.x + 1, this.y + 1);
@@ -870,6 +875,7 @@ AlienBullet = function () {
     if (this.visible) {
       this.context.save();
       this.context.lineWidth = 2;
+      this.context.strokeStyle = Game.primaryColor;
       this.context.beginPath();
       this.context.moveTo(this.x, this.y);
       this.context.lineTo(this.x - this.vel.x, this.y - this.vel.y);
@@ -898,6 +904,7 @@ FighterBullet = function () {
     if (this.visible) {
       this.context.save();
       this.context.lineWidth = 2;
+      this.context.strokeStyle = Game.primaryColor;
       this.context.beginPath();
       this.context.moveTo(this.x - 1, this.y - 1);
       this.context.lineTo(this.x + 1, this.y + 1);
@@ -935,6 +942,7 @@ Missile = function () {
       var rad = (this.rot * Math.PI) / 180;
       this.context.rotate(rad);
       this.context.lineWidth = 1.5;
+      this.context.strokeStyle = Game.primaryColor;
       this.context.beginPath();
       this.context.moveTo(-2, 3);
       this.context.lineTo(0, -5);
@@ -1135,6 +1143,7 @@ FighterMissile = function () {
       var rad = (this.rot * Math.PI) / 180;
       this.context.rotate(rad);
       this.context.lineWidth = 1.5;
+      this.context.strokeStyle = Game.primaryColor;
       this.context.beginPath();
       this.context.moveTo(-2, 3);
       this.context.lineTo(0, -5);
@@ -1241,7 +1250,7 @@ FighterMissile = function () {
 };
 FighterMissile.prototype = new Sprite();
 
-// 敌对战机：默认可生成，出现条件由 Game.FSM.run 控制
+// 敌对战机
 Fighter = function () {
   this.init("fighter",
     [-5, 4,
@@ -1514,19 +1523,19 @@ Fighter.prototype = new Sprite();
 Asteroid = function () {
   var Shapes = [
     // 原有的形状
-    [-10, 0,  -5, 7,  -3, 4,  1, 10,  5, 4,  10, 0,  5, -6,  2, -10,  -4, -10,  -4, -5],
+    [-10, 0, -5, 7, -3, 4, 1, 10, 5, 4, 10, 0, 5, -6, 2, -10, -4, -10, -4, -5],
 
     // 狭长碎片型 - 像断裂的矛头，左右跨度大
-    [-12, 2,  -6, 9,  -2, 5,  4, 12,  11, 3,  13, -4,  5, -7,  2, -11,  -3, -6,  -9, -5],
+    [-12, 2, -6, 9, -2, 5, 4, 12, 11, 3, 13, -4, 5, -7, 2, -11, -3, -6, -9, -5],
 
     // 厚重钝角型 - 整体比较方正宽大，凹陷较浅，像一块未完全碎裂的巨石，给人“血量很高”的感觉
-    [-11, 3,  -7, 10,  0, 6,  7, 10,  12, 4,  10, -5,  6, -3,  2, -11,  -5, -9,  -8, -3],
+    [-11, 3, -7, 10, 0, 6, 7, 10, 12, 4, 10, -5, 6, -3, 2, -11, -5, -9, -8, -3],
 
     // 深度残缺型 - 有一两个极其夸张的深凹陷，模拟被其他陨石撞击后缺了一大块的样子
-    [-10, 5,  -5, 12,  -1, 5,  5, 10,  11, 6,  13, -3,  6, 0,  5, -9,  -2, -11,  -6, -5],
+    [-10, 5, -5, 12, -1, 5, 5, 10, 11, 6, 13, -3, 6, 0, 5, -9, -2, -11, -6, -5],
 
     // 锋利燧石型 - 右侧极度尖锐，整体呈现不规则的箭头状，适合作为高速飞行的陨石
-    [-11, 2,  -6, 8,  -2, 4,  3, 11,  7, 5,  12, 0,  7, -6,  1, -11,  -4, -8,  -9, -3]
+    [-11, 2, -6, 8, -2, 4, 3, 11, 7, 5, 12, 0, 7, -6, 1, -11, -4, -8, -9, -3]
   ];
   var shape = Shapes[Math.floor(Math.random() * Shapes.length)];
   this.init("asteroid", shape);
@@ -1595,6 +1604,7 @@ Explosion = function () {
     if (this.visible) {
       this.context.save();
       this.context.lineWidth = 1.0 / this.scale;
+      this.context.strokeStyle = Game.primaryColor;
       this.context.beginPath();
       for (var i = 0; i < 5; i++) {
         var line = this.lines[i];
@@ -1637,6 +1647,7 @@ MissileExplosion = function (explosionRadius) {
     if (this.visible) {
       this.context.save();
       this.context.lineWidth = 1.0 / this.scale;
+      this.context.strokeStyle = Game.primaryColor;
       // 粒子线段
       this.context.beginPath();
       for (var i = 0; i < this.lines.length; i++) {
@@ -1720,6 +1731,7 @@ GridNode = function () {
 // 矢量字体渲染（来自 typeface-0.14.js）
 // http://typeface.neocracy.org
 Text = {
+  color: 'green',
   renderGlyph: function (ctx, face, char) {
 
     var glyph = face.glyphs[char];
@@ -1779,6 +1791,7 @@ Text = {
     for (var i = 0; i < charsLength; i++) {
       this.renderGlyph(this.context, this.face, chars[i]);
     }
+    this.context.fillStyle = Game.primaryColor;
     this.context.fill();
 
     this.context.restore();
@@ -1823,6 +1836,8 @@ Game = {
 
   canvasWidth: 800,
   canvasHeight: 600,
+  primaryColor: GameConfig.darkColor,
+  secondaryColor: GameConfig.lightColor,
 
   sprites: [],
   ship: null,
@@ -2016,22 +2031,24 @@ Game = {
 window.addEventListener('DOMContentLoaded', function () {
   var canvas = document.getElementById('canvas');
   var container = document.querySelector('.container');
-  // 应用配置尺寸
-  canvas.width = GameConfig.width;
-  canvas.height = GameConfig.height;
+  // 动态自适应尺寸
+  function setCanvasSize(w, h) {
+    canvas.width = w;
+    canvas.height = h;
+    GameConfig.width = w;
+    GameConfig.height = h;
+    Game.canvasWidth = w;
+    Game.canvasHeight = h;
+  }
 
-  Game.canvasWidth = canvas.width;
-  Game.canvasHeight = canvas.height;
-
-  // 窗口自适应缩放逻辑
-  var resize = function () {
-    var scale = Math.min(window.innerWidth / GameConfig.width, window.innerHeight / GameConfig.height);
-    // 保持至少 1 像素
-    scale = Math.max(scale, 0.001);
-
-    canvas.style.width = (GameConfig.width * scale) + 'px';
-    canvas.style.height = (GameConfig.height * scale) + 'px';
-  };
+  function resize() {
+    // 以窗口为基准，保持16:9或原始比例
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    setCanvasSize(w, h);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+  }
 
   window.addEventListener('resize', resize);
   resize();
@@ -2151,7 +2168,10 @@ window.addEventListener('DOMContentLoaded', function () {
   })();
 
   // 主渲染/更新循环
-  var mainLoop = function () {
+  var mainLoop = function (onlyRender) {
+    // 根据模式设置底色
+    context.fillStyle = Game.secondaryColor;
+    context.fillRect(0, 0, Game.canvasWidth, Game.canvasHeight);
     context.clearRect(0, 0, Game.canvasWidth, Game.canvasHeight);
 
     Game.FSM.execute();
@@ -2186,21 +2206,29 @@ window.addEventListener('DOMContentLoaded', function () {
       context.stroke();
     }
 
-    thisFrame = Date.now();
-    elapsed = thisFrame - lastFrame;
-    lastFrame = thisFrame;
-    delta = elapsed / 30;
-
-    for (i = 0; i < sprites.length; i++) {
-
-      sprites[i].run(delta);
-
-      if (sprites[i].reap) {
-        sprites[i].reap = false;
-        sprites.splice(i, 1);
-        i--;
+    if (onlyRender) {
+      // 只渲染，不更新位置
+      for (i = 0; i < sprites.length; i++) {
+        if (sprites[i].visible && typeof sprites[i].draw === 'function') {
+          sprites[i].draw();
+        }
       }
-    }
+      console.warn('只渲染，不更新位置');
+    } else {
+      thisFrame = Date.now();
+      elapsed = thisFrame - lastFrame;
+      lastFrame = thisFrame;
+      delta = elapsed / 30;
+      for (i = 0; i < sprites.length; i++) {
+        sprites[i].run(delta);
+        if (sprites[i].reap) {
+          sprites[i].reap = false;
+          sprites.splice(i, 1);
+          i--;
+        }
+      }
+        console.warn('正常更新位置并渲染');
+      } 
 
     // 分数显示
     var score_text = '' + Game.score;
@@ -2228,7 +2256,7 @@ window.addEventListener('DOMContentLoaded', function () {
         context.lineTo(5, 4);
         context.closePath();
         context.clip();
-        context.fillStyle = '#000000';
+        context.fillStyle = Game.primaryColor;
         context.fillRect(-6, fillStartY, 12, triBottom - fillStartY);
         context.restore();
       }
@@ -2239,7 +2267,7 @@ window.addEventListener('DOMContentLoaded', function () {
     // 帧率显示（F 切换，左上角）
     if (showFramerate) {
       context.save();
-      context.fillStyle = '#000000';
+      context.fillStyle = Game.primaryColor;
       var fpsText = '' + avgFramerate;
       Text.renderText(fpsText, 22, (10 * fpsText.length), 42);
       context.restore();
@@ -2255,9 +2283,8 @@ window.addEventListener('DOMContentLoaded', function () {
       var speedInt = Math.round(currentSpeed);
 
       context.save();
-      context.fillStyle = '#000000';
-
-      Text.renderText('' + speedInt, 18, 10, Game.canvasHeight - 20);
+      context.fillStyle = Game.primaryColor;
+      Text.renderText('' + speedInt, 20, 10, Game.canvasHeight - 20);
 
       var availableBullets = 0;
       if (Game.ship && Game.ship.bullets) {
@@ -2268,7 +2295,7 @@ window.addEventListener('DOMContentLoaded', function () {
         }
       }
       var bulletUiText = availableBullets + '/' + GameConfig.playerMaxBullets;
-      Text.renderText(bulletUiText, 18, Game.canvasWidth - (14 * bulletUiText.length) - 8, Game.canvasHeight - 20);
+      Text.renderText(bulletUiText, 20, Game.canvasWidth - (14 * bulletUiText.length) - 8, Game.canvasHeight - 20);
 
       var barMaxHeight = Math.floor(Game.canvasHeight / 4);
       var barWidth = 4;
@@ -2305,12 +2332,6 @@ window.addEventListener('DOMContentLoaded', function () {
   // 使用 keyup 防止按住按键反复触发切换
   window.addEventListener('keyup', function (e) {
     switch (KEY_CODES[e.keyCode]) {
-      case 'framerate': // 显示帧率
-        showFramerate = !showFramerate;
-        break;
-      case 'playerui': // 速度/子弹UI
-        showPlayerUi = !showPlayerUi;
-        break;
       case 'pause': // 暂停
         if (Game.FSM.state === 'waiting') break; // 标题界面不允许暂停
         paused = !paused;
@@ -2320,8 +2341,25 @@ window.addEventListener('DOMContentLoaded', function () {
           mainLoop();
         }
         break;
+      case 'framerate': // 显示帧率
+        showFramerate = !showFramerate;
+        break;
+      case 'playerui': // 速度/子弹UI
+        showPlayerUi = !showPlayerUi;
+        break;
       case 'mute': // 静音
         SFX.muted = !SFX.muted;
+        break;
+      case 'darkmode': // 暗黑模式
+        document.body.classList.toggle('dark-mode');
+        if (Game.primaryColor === GameConfig.darkColor) {
+          Game.primaryColor = GameConfig.lightColor;
+          Game.secondaryColor = GameConfig.darkColor;
+        } else {
+          Game.primaryColor = GameConfig.darkColor;
+          Game.secondaryColor = GameConfig.lightColor;
+        }
+        if (paused) mainLoop(true); // 如果处于暂停状态，立即重新渲染当前帧
         break;
     }
   });
