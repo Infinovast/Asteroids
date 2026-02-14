@@ -1,5 +1,96 @@
+// 辉光特效类
+const Glow = function () {
+  this.init = function (name, color, radius, alpha, fadeFrames, direction) {
+    this.name = name || 'glow';
+    this.color = color || 'rgba(255,255,128,1)';
+    this.radius = radius || 24;
+    this.alpha = alpha || 0.7;
+    this.fadeFrames = fadeFrames || 20;
+    this.frame = 0;
+    this.direction = direction || 0; // 0:全向, 1:前, -1:后
+    this.visible = true;
+    this.x = 0;
+    this.y = 0;
+    this.rot = 0;
+    this.parent = null;
+  };
+
+  this.run = function (delta) {
+    if (!this.visible) return;
+    this.frame++;
+    if (this.frame > this.fadeFrames) {
+      this.visible = false;
+    }
+    this.draw();
+  };
+
+  this.draw = function () {
+    if (!this.visible) return;
+    var ctx = (this.parent ? this.parent.context : this.context) || this.context;
+    ctx.save();
+    // 位置和旋转
+    if (this.parent) {
+      ctx.translate(this.parent.x, this.parent.y);
+      ctx.rotate((this.parent.rot - 90) * Math.PI / 180);
+    } else {
+      ctx.translate(this.x, this.y);
+      ctx.rotate((this.rot - 90) * Math.PI / 180);
+    }
+    // 方向偏移（x轴）
+    let offset = 0;
+    let rx = this.radius, ry = this.radius;
+    let semiDir = 0; // 半圆朝向
+    if (this.direction === 1) { // 前向
+      offset = 6;
+      rx = this.radius * 1.2;
+      ry = this.radius * 0.6;
+      semiDir = 0; // 半圆朝右
+    }
+    if (this.direction === -1) { // 后向
+      offset = -6;
+      rx = this.radius * 1.5 * (0.3 + 1 * Math.random()); // 0.3-1.3倍随机倍率
+      ry = this.radius * 0.6 + 0.1 * Math.random(); // 短轴
+      semiDir = Math.PI; // 半圆朝左
+    }
+    ctx.translate(offset, 0);
+    // 渐变色
+    var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    grad.addColorStop(0, this.color.replace(/\d?\.?\d+\)$/g, this.alpha + ")"));
+    grad.addColorStop(1, this.color.replace(/\d?\.?\d+\)$/g, "0)"));
+    ctx.globalAlpha = this.alpha * (1 - this.frame / this.fadeFrames);
+    if (this.direction === 0) {
+      // 重生辉光始终为圆形
+      ctx.beginPath();
+      ctx.arc(0, 0, rx, 0, 2 * Math.PI);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+    } else {
+      // 底层大椭圆（更大更淡）
+      ctx.save();
+      ctx.globalAlpha *= 0.28;
+      ctx.scale(1.25, (ry / rx) * 1.1);
+      ctx.beginPath();
+      ctx.ellipse(rx * Math.cos(semiDir), 0, rx * 0.95, rx * 0.7, 0, 0, 2 * Math.PI);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+      // 主辉光（拉伸椭圆）
+      ctx.save();
+      ctx.scale(1, ry / rx);
+      ctx.beginPath();
+      ctx.ellipse(rx * Math.cos(semiDir), 0, rx * 0.7, rx * 0.5, 0, 0, 2 * Math.PI);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  };
+};
 // 游戏配置
-var GameConfig = {
+const GameConfig = {
   width: (typeof window !== 'undefined' ? window.innerWidth : 1600),      // 窗体宽（默认全屏）
   height: (typeof window !== 'undefined' ? window.innerHeight : 960),      // 窗体高（默认全屏）
   startLives: 6,    // 初始生命值
@@ -14,7 +105,7 @@ var GameConfig = {
   playerMissileCooldown: 50, // 玩家导弹发射间隔（帧）
   playerMaxSpeed: 8, // 玩家最大速度
   playerAccel: 0.5, // 玩家推进加速度
-  playerBrakeAccel: 0.1, // 玩家刹车加速度
+  playerBrakeAccel: 0.15, // 玩家刹车加速度
   playerRotSpeed: 7, // 玩家旋转速度
   missileSpeed: 24,  // 导弹速度
   missileLifetime: 35, // 导弹寿命（帧数）
@@ -51,7 +142,7 @@ var GameConfig = {
 };
 
 // 输入映射到游戏动作
-var KEY_CODES = {
+const KEY_CODES = {
   27: 'pause',      // Esc键暂停
   32: 'space',      // Space键射击
   37: 'left',       // 左键左旋转
@@ -72,8 +163,8 @@ var KEY_CODES = {
 }
 
 // 记录动作按下状态
-var KEY_STATUS = {};
-for (var code in KEY_CODES) {
+const KEY_STATUS = {};
+for (const code in KEY_CODES) {
   KEY_STATUS[KEY_CODES[code]] = false;
 }
 
@@ -92,10 +183,10 @@ window.addEventListener('keyup', function (e) {
 });
 
 // 空间网格尺寸，用于碰撞分区
-GRID_SIZE = 60;
+const GRID_SIZE = 60;
 
 // 2x3 变换矩阵工具
-Matrix = function (rows, columns) {
+const Matrix = function (rows, columns) {
   var i, j;
   this.data = new Array(rows);
   for (i = 0; i < rows; i++) {
@@ -133,7 +224,7 @@ Matrix = function (rows, columns) {
 };
 
 // 精灵基类：变换、移动、碰撞
-Sprite = function () {
+const Sprite = function () {
   this.init = function (name, points) {
     this.name = name;
     this.points = points;
@@ -438,7 +529,7 @@ Sprite = function () {
 };
 
 // 玩家飞船：推进、旋转、射击
-Ship = function () {
+const Ship = function () {
   this.init("ship",
     [-5, 4,
       0, -12,
@@ -474,6 +565,11 @@ Ship = function () {
         bullet.vel.x = GameConfig.bulletSpeed * vectorx + this.vel.x;
         bullet.vel.y = GameConfig.bulletSpeed * vectory + this.vel.y;
         bullet.visible = true;
+        // 添加前向辉光
+        var glow = new Glow();
+        glow.init('fire_glow', 'rgba(255,255,180,1)', 18, 0.55, 12, 1);
+        glow.parent = this;
+        Game.sprites.push(glow);
         break;
       }
     }
@@ -503,10 +599,27 @@ Ship = function () {
     // 停止停止推进音效
     if (!KEY_STATUS.up) {
       this.stopThrust();
+      this.thrustColorTimer = 0;
     }
 
     // 前进推进
     if (KEY_STATUS.up) {
+      // 推进辉光颜色渐变
+      this.thrustColorTimer += delta;
+      var t = Math.min(this.thrustColorTimer / 60, 1); // 2秒内从0到1
+      // 橙红到蓝色插值
+      function lerp(a, b, t) { return a + (b - a) * t; }
+      var r = Math.round(lerp(255, 128, t));
+      var g = Math.round(lerp(120, 200, t));
+      var b = Math.round(lerp(40, 255, t));
+      var color = 'rgba(' + r + ',' + g + ',' + b + ',1)';
+      this.children.exhaust.visible = Math.random() > 0.2;
+      if (this.children.exhaust.visible) {
+        var glow = new Glow();
+        glow.init('thrust_glow', color, 16, 0.45, 10, -1);
+        glow.parent = this;
+        Game.sprites.push(glow);
+      }
       // 随机时间点开始播放推进音效
       if (!this.thrustPlaying && !SFX.muted) {
         var thrustAudio = SFX.thrust();
@@ -523,9 +636,8 @@ Ship = function () {
       var rad = ((this.rot - 90) * Math.PI) / 180;
       this.acc.x = GameConfig.playerAccel * Math.cos(rad);
       this.acc.y = GameConfig.playerAccel * Math.sin(rad);
-      this.children.exhaust.visible = Math.random() > 0.1;
-      // 逆向刹车（弱于推进）
     } else if (KEY_STATUS.down) {
+      // 逆向刹车（弱于推进）
       var speed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
       if (speed > 0) {
         var brakeAccel = GameConfig.playerBrakeAccel;
@@ -550,7 +662,7 @@ Ship = function () {
       this.bulletBurstGapCounter -= delta;
     }
 
-    // 机炮三连发：间隔触发一轮，每轮3发
+    // 机炮连发
     if (KEY_STATUS.space && this.bulletBurstShotsLeft <= 0 && this.bulletCounter <= 0) {
       this.bulletCounter = GameConfig.playerBulletCooldown;
       this.bulletBurstShotsLeft = GameConfig.playerBulletBurstCount;
@@ -652,13 +764,17 @@ Ship = function () {
 
     Game.FSM.state = 'player_died';
     this.visible = false;
+    this.stopThrust();  // 真死时强制停止推进音效
     SFX.boom();
+    var glow = new Glow();
+    glow.init('die_glow', 'rgba(255, 198, 128, 1)', 100, 0.3, 240, 0);
+    glow.parent = Game.ship;
+    Game.sprites.push(glow);
+
     if (this.currentNode) {
       this.currentNode.leave(this);
       this.currentNode = null;
     }
-    if (this.thrustPlaying)  // 真死时强制停止推进音效
-      this.stopThrust();
 
     for (var i = 0; i < Game.sprites.length; i++) {
       if (Game.sprites[i].name === 'fighterbullet' ||
@@ -672,7 +788,7 @@ Ship = function () {
 Ship.prototype = new Sprite();
 
 // UFO：左右屏外生成，调整上下移动，朝玩家开火
-UFO = function () {
+const UFO = function () {
   this.init("ufo",
     [-20, 0,
     -12, -4,
@@ -783,8 +899,17 @@ UFO = function () {
   };
 
   UFO.prototype.collision = function (other) {
+    // if (!this.visible) return;
     if (other.name == "bullet" || other.name == "missile") Game.score += 200;
-    SFX.explosion();
+    // ufo被击败时的爆炸效果，辉光固定在爆炸点
+    var glow = new Glow();
+    glow.init('die_glow', 'rgba(255, 198, 128, 1)', 70, 0.3, 200, 0);
+    glow.x = other.x;
+    glow.y = other.y;
+    glow.rot = 0;
+    glow.parent = null;
+    Game.sprites.push(glow);
+    SFX.boom();
     Game.explosionAt(other.x, other.y);
     this.visible = false;
     this.newPosition();
@@ -808,7 +933,7 @@ UFO = function () {
 UFO.prototype = new Sprite();
 
 // 玩家子弹
-Bullet = function () {
+const Bullet = function () {
   this.init("bullet", [0, 0]);
   this.time = 0;
   this.bridgesH = false;
@@ -843,7 +968,9 @@ Bullet = function () {
   this.collision = function (other) {
     this.time = 0;
     this.visible = false;
-    this.currentNode.leave(this);
+    if (this.currentNode && typeof this.currentNode.leave === 'function') {
+      this.currentNode.leave(this);
+    }
     this.currentNode = null;
   };
   this.transformedPoints = function (other) {
@@ -854,7 +981,7 @@ Bullet = function () {
 Bullet.prototype = new Sprite();
 
 // 敌对战机机炮子弹
-FighterBullet = function () {
+const FighterBullet = function () {
   this.init("fighterbullet");
 
   this.preMove = function (delta) {
@@ -885,7 +1012,7 @@ FighterBullet = function () {
 FighterBullet.prototype = new Bullet();
 
 // 追踪导弹：自动追踪最近目标，飞行一段距离后爆炸（范围伤害）
-Missile = function () {
+const Missile = function () {
   this.init("missile",
     [-2, 3,
       0, -5,
@@ -1088,7 +1215,7 @@ Missile = function () {
 Missile.prototype = new Sprite();
 
 // 敌对战机导弹：追踪玩家，爆炸半径更小，转向力度更小
-FighterMissile = function () {
+const FighterMissile = function () {
   this.init("fightermissile",
     [-2, 3,
       0, -5,
@@ -1219,7 +1346,7 @@ FighterMissile = function () {
 FighterMissile.prototype = new Sprite();
 
 // 敌对战机
-Fighter = function () {
+const Fighter = function () {
   this.init("fighter",
     [-5, 4,
       0, -12,
@@ -1480,13 +1607,20 @@ Fighter = function () {
   };
 
   this.collision = function (other) {
-    if (!this.visible) return;
-    if (other.name === "bullet" || other.name === "missile") {
-      Game.score += 260;
-    }
-    SFX.explosion();
+    // if (!this.visible) return;
+    if (other.name === "bullet" || other.name === "missile") Game.score += 260;
+    // 敌机被击败时的爆炸效果，辉光固定在爆炸点
+    var glow = new Glow();
+    glow.init('die_glow', 'rgba(255, 198, 128, 1)', 70, 0.3, 200, 0);
+    glow.x = this.x;
+    glow.y = this.y;
+    glow.rot = 0;
+    glow.parent = null;
+    Game.sprites.push(glow);
+    SFX.boom();
     Game.explosionAt(this.x, this.y);
     this.visible = false;
+
     if (this.currentNode) {
       this.currentNode.leave(this);
       this.currentNode = null;
@@ -1497,7 +1631,7 @@ Fighter = function () {
 Fighter.prototype = new Sprite();
 
 // 小行星可分裂并计分
-Asteroid = function () {
+const Asteroid = function () {
   var Shapes = [
     // 原有的形状
     [-10, 0, -5, 7, -3, 4, 1, 10, 5, 4, 10, 0, 5, -6, 2, -10, -4, -10, -4, -5],
@@ -1532,7 +1666,7 @@ Asteroid = function () {
     if (other.name == "missile" && Date.now() - this.spawnTime < 100) return;
 
     SFX.explosion();
-    if (other.name == "bullet" || other.name == "missile") Game.score += 120 / this.scale;
+    if (other.name == "bullet" || other.name == "missile" || other.name == "ship") Game.score += 120 / this.scale;
     this.scale /= 3;
     if (this.scale > 0.5) {
       // 分裂成碎片
@@ -1562,7 +1696,7 @@ Asteroid = function () {
 Asteroid.prototype = new Sprite();
 
 // 线段爆炸，靠缩放消失
-Explosion = function () {
+const Explosion = function () {
   this.init("explosion");
 
   this.bridgesH = false;
@@ -1604,7 +1738,7 @@ Explosion = function () {
 Explosion.prototype = new Sprite();
 
 // 导弹爆炸特效：更多粒子线段 + 扩散环
-MissileExplosion = function (explosionRadius) {
+const MissileExplosion = function (explosionRadius) {
   this.init("missileexplosion");
 
   this.bridgesH = false;
@@ -1655,7 +1789,7 @@ MissileExplosion = function (explosionRadius) {
 MissileExplosion.prototype = new Sprite();
 
 // 网格节点，用于粗略碰撞
-GridNode = function () {
+const GridNode = function () {
   this.north = null;
   this.south = null;
   this.east = null;
@@ -1778,7 +1912,7 @@ Text = {
 };
 
 // 音效系统（兼容处理）
-SFX = {
+const SFX = {
   laser: new Audio('assets/audio/laser.mp3'),
   explosion: new Audio('assets/audio/explosion.mp3'),
   thrust: new Audio('assets/audio/thrust.mp3'),
@@ -1787,7 +1921,7 @@ SFX = {
 };
 
 // 为每个音效添加播放方法封装
-for (var key in SFX) {
+for (const key in SFX) {
   if (key === 'muted') continue;
   (function (name) {
     var audio = SFX[name];
@@ -1805,7 +1939,7 @@ for (var key in SFX) {
 }
 
 // 全局游戏状态与规则
-Game = {
+const Game = {
   score: 0,
   totalAsteroids: 5,
   lives: 0,
@@ -1828,8 +1962,13 @@ Game = {
   // 在空区域生成一波小行星
   spawnAsteroids: function (count) {
     if (!count) count = this.totalAsteroids;
+    var makeGiant = true; // 生成一个大型陨石
     for (var i = 0; i < count; i++) {
       var roid = new Asteroid();
+      if (makeGiant) {
+        roid.scale = 10;
+        makeGiant = false;
+      }
       roid.x = Math.random() * this.canvasWidth;
       roid.y = Math.random() * this.canvasHeight;
       while (!roid.isClear()) {
@@ -1879,8 +2018,6 @@ Game = {
   FSM: {
     // 初始化，实际上直接进入waiting状态
     boot: function () {
-      // // 游戏开始前没手动换亮色的话，默认配色按黑暗模式，这里标记一下
-      // if (Game.primaryColor === GameConfig.darkColor) document.body.classList.add('dark-mode');
       Game.spawnAsteroids(7);
       Game.fighter.spawn(true);
       this.state = 'waiting';
@@ -1931,6 +2068,11 @@ Game = {
         Game.ship.vel.x = 0;
         Game.ship.vel.y = 0;
         Game.ship.visible = true;
+        // 添加重生辉光，否则玩家容易失焦
+        var glow = new Glow();
+        glow.init('respawn_glow', 'rgba(255,255,128,1)', 200, 0.3, 240, 0);
+        glow.parent = Game.ship;
+        Game.sprites.push(glow);
         this.state = 'run';
       }
     },
@@ -2030,8 +2172,8 @@ window.addEventListener('DOMContentLoaded', function () {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeByPreference);
   }
 
-  var canvas = document.getElementById('canvas');
-  var container = document.querySelector('.container');
+  const canvas = document.getElementById('canvas');
+  const container = document.querySelector('.container');
   // 动态自适应尺寸
   function setCanvasSize(w, h) {
     canvas.width = w;
@@ -2056,12 +2198,13 @@ window.addEventListener('DOMContentLoaded', function () {
 
   var context = canvas.getContext("2d");
   Text.context = context;
+  Glow.prototype.context = context;
   Text.face = vector_battle;
 
   // 构建碰撞分区网格
-  var gridWidth = Math.round(Game.canvasWidth / GRID_SIZE);
-  var gridHeight = Math.round(Game.canvasHeight / GRID_SIZE);
-  var grid = new Array(gridWidth);
+  const gridWidth = Math.round(Game.canvasWidth / GRID_SIZE);
+  const gridHeight = Math.round(Game.canvasHeight / GRID_SIZE);
+  const grid = new Array(gridWidth);
   for (var i = 0; i < gridWidth; i++) {
     grid[i] = new Array(gridHeight);
     for (var j = 0; j < gridHeight; j++) {
@@ -2091,7 +2234,7 @@ window.addEventListener('DOMContentLoaded', function () {
     grid[gridWidth - 1][j].dupe.horizontal = -Game.canvasWidth;
   }
 
-  var sprites = [];
+  const sprites = [];
   Game.sprites = sprites;
 
   // 共享渲染上下文与矩阵
@@ -2099,7 +2242,7 @@ window.addEventListener('DOMContentLoaded', function () {
   Sprite.prototype.grid = grid;
   Sprite.prototype.matrix = new Matrix(2, 3);
 
-  var ship = new Ship();
+  const ship = new Ship();
 
   ship.x = Game.canvasWidth / 2;
   ship.y = Game.canvasHeight / 2;
@@ -2107,31 +2250,31 @@ window.addEventListener('DOMContentLoaded', function () {
   sprites.push(ship);
 
   ship.bullets = [];
-  for (var i = 0; i < GameConfig.playerMaxBullets; i++) {
-    var bull = new Bullet();
+  for (let i = 0; i < GameConfig.playerMaxBullets; i++) {
+    const bull = new Bullet();
     ship.bullets.push(bull);
     sprites.push(bull);
   }
 
   ship.missiles = [];
-  for (var i = 0; i < 5; i++) {
-    var miss = new Missile();
+  for (let i = 0; i < 5; i++) {
+    const miss = new Missile();
     ship.missiles.push(miss);
     sprites.push(miss);
   }
   Game.ship = ship;
 
-  var ufo = new UFO();
+  const ufo = new UFO();
   ufo.setup();
   sprites.push(ufo);
   Game.ufo = ufo;
 
-  var fighter = new Fighter();
+  const fighter = new Fighter();
   fighter.setup();
   sprites.push(fighter);
   Game.fighter = fighter;
 
-  var extraDude = new Ship();
+  const extraDude = new Ship();
   extraDude.scale = 0.6;
   extraDude.visible = true;
   extraDude.preMove = null;
@@ -2139,36 +2282,32 @@ window.addEventListener('DOMContentLoaded', function () {
 
   var i, j = 0;
 
-  var paused = false;
-  var showFramerate = false;
-  var showPlayerUi = true;
-  var avgFramerate = 0;
-  var frameCount = 0;
-  var elapsedCounter = 0;
+  let paused = false;
+  let showFramerate = false;
+  let showPlayerUi = true;
+  let avgFramerate = 0;
+  let frameCount = 0;
+  let elapsedCounter = 0;
 
-  var lastFrame = Date.now();
-  var thisFrame;
-  var elapsed;
-  var delta;
+  let lastFrame = Date.now();
+  let thisFrame;
+  let elapsed;
+  let delta;
 
-  var canvasNode = canvas;
+  const canvasNode = canvas;
 
   // requestAnimationFrame 兼容层（setTimeout 兜底）
   // 来源：
   // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
-  window.requestAnimFrame = (function () {
-    return window.requestAnimationFrame ||
-      window.webkitRequestAnimationFrame ||
-      window.mozRequestAnimationFrame ||
-      window.oRequestAnimationFrame ||
-      window.msRequestAnimationFrame ||
-      function (/* function */ callback, /* DOMElement */ element) {
-        window.setTimeout(callback, 1000 / 60);
-      };
-  })();
+  const requestAnimFrame = window.requestAnimationFrame ||
+    window.webkitRequestAnimationFrame ||
+    window.mozRequestAnimationFrame ||
+    window.oRequestAnimationFrame ||
+    window.msRequestAnimationFrame ||
+    function (callback) { window.setTimeout(callback, 1000 / 60); };
 
   // 主渲染/更新循环
-  var mainLoop = function () {
+  const mainLoop = function () {
     // 根据模式设置底色
     context.fillStyle = Game.secondaryColor;
     context.fillRect(0, 0, Game.canvasWidth, Game.canvasHeight);
@@ -2321,7 +2460,7 @@ window.addEventListener('DOMContentLoaded', function () {
         frameCount = 0;
       }
       // 继续下一帧
-      requestAnimFrame(mainLoop, canvasNode);
+      requestAnimFrame(mainLoop);
     }
   };
 
@@ -2336,8 +2475,18 @@ window.addEventListener('DOMContentLoaded', function () {
         paused = !paused;
         if (paused) {
           mutedBeforePause = SFX.muted;
-          SFX.muted = true; // 暂停时强制静音
-          ship.stopThrust(); // 停止thrust音效
+          // ship.stopThrust(); // 停止thrust音效
+          // 暂停时彻底停止所有音效播放
+          this.thrustPlaying = false;
+          for (const key in SFX) {
+            if (typeof SFX[key] === 'function') {
+              const audio = SFX[key]();
+              if (audio && typeof audio.pause === 'function') {
+                audio.pause();
+                audio.currentTime = 0;
+              }
+            }
+          }
         } else {  // 继续运行
           SFX.muted = mutedBeforePause; // 恢复暂停前的静音状态
           lastFrame = Date.now();
