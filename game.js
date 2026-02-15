@@ -383,9 +383,11 @@ const Sprite = function () {
     if (!this.visible) return;
 
     this.context.lineWidth = 1.0 / this.scale;
-    this.context.strokeStyle = Game.primaryColor;
-    for (child in this.children) {
-      this.children[child].draw();
+    // 优先使用自定义strokeStyle（如玩家飞船），否则用主色
+    if (this.strokeStyle) {
+      this.context.strokeStyle = this.strokeStyle;
+    } else {
+      this.context.strokeStyle = Game.primaryColor;
     }
 
     this.context.beginPath();
@@ -399,6 +401,11 @@ const Sprite = function () {
 
     this.context.closePath();
     this.context.stroke();
+
+    // 把子精灵绘制放到主形状之后，避免子精灵修改context.strokeStyle覆盖父级设置
+    for (child in this.children) {
+      this.children[child].draw();
+    }
   };
   // 只检查邻近格子减少碰撞
   this.findCollisionCanidates = function () {
@@ -534,11 +541,13 @@ const Ship = function () {
     [-5, 4,
       0, -12,
       5, 4]);
+  this.strokeStyle = 'rgb(33,150,243)'; // 蓝色线条
   this.children.exhaust = new Sprite();
   this.children.exhaust.init("exhaust",
     [-3, 6,
       0, 11,
       3, 6]);
+  this.children.exhaust.strokeStyle = 'rgba(255,200,40,1)'; // 尾焰黄色
 
   this.bulletCounter = 0;
   this.bulletBurstShotsLeft = 0;
@@ -2468,13 +2477,11 @@ window.addEventListener('DOMContentLoaded', function () {
 
   // 使用 keyup 防止按住按键反复触发切换
   window.addEventListener('keyup', function (e) {
-    var mutedBeforePause;
     switch (KEY_CODES[e.keyCode]) {
       case 'pause': // 暂停
         if (Game.FSM.state === 'waiting') break; // 标题界面不允许暂停
         paused = !paused;
         if (paused) {
-          mutedBeforePause = SFX.muted;
           // ship.stopThrust(); // 停止thrust音效
           // 暂停时彻底停止所有音效播放
           this.thrustPlaying = false;
@@ -2488,7 +2495,6 @@ window.addEventListener('DOMContentLoaded', function () {
             }
           }
         } else {  // 继续运行
-          SFX.muted = mutedBeforePause; // 恢复暂停前的静音状态
           lastFrame = Date.now();
           mainLoop();
         }
