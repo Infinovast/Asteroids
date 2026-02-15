@@ -93,11 +93,12 @@ const Glow = function () {
 const GameConfig = {
   width: (typeof window !== 'undefined' ? window.innerWidth : 1600),      // 窗体宽（默认全屏）
   height: (typeof window !== 'undefined' ? window.innerHeight : 960),      // 窗体高（默认全屏）
-  startLives: 6,    // 初始生命值
+  startLives: 5,    // 初始生命值
+  lifeSegmentsPerLife: 4, // 每条命分为多少段，受击时逐段扣除
   startAsteroids: 6, // 初始陨石数量
 
   bulletSpeed: 17,   // 子弹速度
-  playerMaxBullets: 10, // 同时存在的玩家子弹最大值
+  playerMaxBullets: 12, // 同时存在的玩家子弹最大值
   playerBulletCooldown: 3, // 玩家机炮发射间隔（帧）
   playerBulletBurstCount: 3, // 玩家机炮每轮连发数
   playerBulletBurstShotInterval: 0, // 玩家机炮连发内间隔（帧）
@@ -2043,7 +2044,7 @@ const Game = {
   // 每次受击仅消耗 1/3 条命，累计 3 次才扣 1 条完整生命
   consumeLifeSegment: function () {
     this.lifeSegmentDamage++;
-    if (this.lifeSegmentDamage >= 3) {
+    if (this.lifeSegmentDamage >= GameConfig.lifeSegmentsPerLife) {
       this.lifeSegmentDamage = 0;
       this.lives--;
       return true;
@@ -2425,7 +2426,7 @@ window.addEventListener('DOMContentLoaded', function () {
       var lifeSpacing = 17; // 图标间距
       for (i = 0; i < Game.lives; i++) {
         context.save();
-        extraDude.scale = 0.9;
+        extraDude.scale = 1.2;
         extraDude.x = Game.canvasWidth - lifeMargin - (i * lifeSpacing) - 5;
         extraDude.y = lifeMargin + 25;
         extraDude.configureTransform();
@@ -2436,7 +2437,7 @@ window.addEventListener('DOMContentLoaded', function () {
           var triBottom = 4;
           var triTop = -12;
           var triHeight = triBottom - triTop;
-          var fillStartY = triBottom - (Game.lifeSegmentDamage / 3) * triHeight;
+          var fillStartY = triBottom - (Game.lifeSegmentDamage / GameConfig.lifeSegmentsPerLife) * triHeight;
 
           context.save();
           context.beginPath();
