@@ -1926,24 +1926,51 @@ const SFX = {
   explosion: new Audio('assets/audio/explosion.mp3'),
   thrust: new Audio('assets/audio/thrust.mp3'),
   boom: new Audio('assets/audio/boom.mp3'),
+  background: new Audio('assets/audio/background.mp3'),
   muted: false
 };
 
 // 为每个音效添加播放方法封装
+// 为每个音效添加播放方法封装，background 使用专用控制以支持暂停续播
 for (const key in SFX) {
   if (key === 'muted') continue;
   (function (name) {
     var audio = SFX[name];
-    // 覆盖为函数调用形式如 SFX.laser()
-    SFX[name] = function () {
-      if (!SFX.muted) {
+    if (name === 'background') {
+      var storedPos = 0;
+      // background 支持 action: 'play'|'pause'|'stop'，默认返回 audio
+      SFX.background = function (action) {
         try {
-          if (audio.currentTime > 0) audio.currentTime = 0;
-          audio.play();
+          if (action === 'play') {
+            if (!SFX.muted) {
+              audio.loop = true;
+              audio.currentTime = storedPos || 0;
+              var p = audio.play();
+              if (p && p.catch) p.catch(function () { });
+            }
+          } else if (action === 'pause') {
+            storedPos = audio.currentTime || 0;
+            audio.pause();
+          } else if (action === 'stop') {
+            audio.pause();
+            audio.currentTime = 0;
+            storedPos = 0;
+          }
         } catch (e) { }
-      }
-      return audio;
-    };
+        return audio;
+      };
+    } else {
+      // 其它音效行为保持原有：每次重置到开头并播放
+      SFX[name] = function () {
+        if (!SFX.muted) {
+          try {
+            if (audio.currentTime > 0) audio.currentTime = 0;
+            audio.play();
+          } catch (e) { }
+        }
+        return audio;
+      };
+    }
   })(key);
 }
 
@@ -2066,6 +2093,7 @@ const Game = {
       Game.nextUFOTime = Date.now() + 10000 + (10000 * Math.random());
       Game.nextFighterTime = Date.now() + GameConfig.fighterFirstSpawnDelay + (0.5 * GameConfig.fighterFirstSpawnDelay * Math.random());
 
+      SFX.background('play');
       this.state = 'spawn_ship';
     },
     // 在安全区域生成玩家
@@ -2163,23 +2191,28 @@ const Game = {
 // 初始化画布、网格、精灵和主循环
 // 监听 DOMContentLoaded 事件，确保在 HTML 元素加载完成后再执行初始化代码
 window.addEventListener('DOMContentLoaded', function () {
-  // 检测用户系统/浏览器偏好决定配色方案
-  function setDarkModeByPreference() {
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefersDark) {
-      Game.primaryColor = GameConfig.lightColor;
-      Game.secondaryColor = GameConfig.darkColor;
-      document.body.classList.add('dark-mode');
-    } else {
-      Game.primaryColor = GameConfig.darkColor;
-      Game.secondaryColor = GameConfig.lightColor;
-      document.body.classList.remove('dark-mode');
-    }
-  }
-  setDarkModeByPreference();
-  if (window.matchMedia) { // 监听系统/浏览器主题变化，动态切换配色
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeByPreference);
-  }
+  // // 检测用户系统/浏览器偏好决定配色方案
+  // function setDarkModeByPreference() {
+  //   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  //   if (prefersDark) {
+  //     Game.primaryColor = GameConfig.lightColor;
+  //     Game.secondaryColor = GameConfig.darkColor;
+  //     document.body.classList.add('dark-mode');
+  //   } else {
+  //     Game.primaryColor = GameConfig.darkColor;
+  //     Game.secondaryColor = GameConfig.lightColor;
+  //     document.body.classList.remove('dark-mode');
+  //   }
+  // }
+  // setDarkModeByPreference();
+  // if (window.matchMedia) { // 监听系统/浏览器主题变化，动态切换配色
+  //   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeByPreference);
+  // }
+  
+  // 默认启用深色模式
+  Game.primaryColor = GameConfig.lightColor;
+  Game.secondaryColor = GameConfig.darkColor;
+  document.body.classList.add('dark-mode');
 
   const canvas = document.getElementById('canvas');
   const container = document.querySelector('.container');
@@ -2284,7 +2317,7 @@ window.addEventListener('DOMContentLoaded', function () {
   Game.fighter = fighter;
 
   const extraDude = new Ship();
-  extraDude.scale = 0.6;
+  extraDude.scale = 0.9;
   extraDude.visible = true;
   extraDude.preMove = null;
   extraDude.children = [];
@@ -2297,6 +2330,8 @@ window.addEventListener('DOMContentLoaded', function () {
   let avgFramerate = 0;
   let frameCount = 0;
   let elapsedCounter = 0;
+  // 平滑显示的子弹占比（0-1），用于右侧子弹条平滑过渡
+  let displayedBulletFraction = 1.0;
 
   let lastFrame = Date.now();
   let thisFrame;
@@ -2375,15 +2410,22 @@ window.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    // 分数显示
+    // 分数显示（增大并向内缩进）
     var score_text = '' + Game.score;
-    Text.renderText(score_text, 18, Game.canvasWidth - 14 * score_text.length, 20);
+    var scoreSize = 28;
+    var scoreCharW = 14 * (scoreSize / 18);
+    var cornerMargin = 42;
+    var scoreX = Game.canvasWidth - cornerMargin - Math.round(scoreCharW * score_text.length);
+    Text.renderText(score_text, scoreSize, scoreX, cornerMargin);
 
-    // 剩余生命显示
+    // 剩余生命显示（右上，增大并内缩）
+    var lifeMargin = cornerMargin;
+    var lifeSpacing = 17; // 图标间距
     for (i = 0; i < Game.lives; i++) {
       context.save();
-      extraDude.x = Game.canvasWidth - (8 * (i + 1));
-      extraDude.y = 32;
+      extraDude.scale = 0.9;
+      extraDude.x = Game.canvasWidth - lifeMargin - (i * lifeSpacing) - 5;
+      extraDude.y = lifeMargin + 25;
       extraDude.configureTransform();
       extraDude.draw();
 
@@ -2401,7 +2443,7 @@ window.addEventListener('DOMContentLoaded', function () {
         context.lineTo(5, 4);
         context.closePath();
         context.clip();
-        context.fillStyle = Game.primaryColor;
+        context.fillStyle = context.strokeStyle;  // 使用与线条相同的颜色填充
         context.fillRect(-6, fillStartY, 12, triBottom - fillStartY);
         context.restore();
       }
@@ -2414,7 +2456,8 @@ window.addEventListener('DOMContentLoaded', function () {
       context.save();
       context.fillStyle = Game.primaryColor;
       var fpsText = '' + avgFramerate;
-      Text.renderText(fpsText, 22, (10 * fpsText.length), 42);
+      // 使用统一的 cornerMargin 控制帧率显示位置
+      Text.renderText(fpsText, 28, cornerMargin, cornerMargin);
       context.restore();
     }
 
@@ -2429,7 +2472,11 @@ window.addEventListener('DOMContentLoaded', function () {
 
       context.save();
       context.fillStyle = Game.primaryColor;
-      Text.renderText('' + speedInt, 20, 10, Game.canvasHeight - 20);
+      // 速度显示（左下，增大并内缩）
+      var speedSize = 26;
+      var speedX = cornerMargin;
+      var speedY = Game.canvasHeight - cornerMargin;
+      Text.renderText('' + speedInt, speedSize, speedX, speedY);
 
       var availableBullets = 0;
       if (Game.ship && Game.ship.bullets) {
@@ -2440,17 +2487,33 @@ window.addEventListener('DOMContentLoaded', function () {
         }
       }
       var bulletUiText = availableBullets + '/' + GameConfig.playerMaxBullets;
-      Text.renderText(bulletUiText, 20, Game.canvasWidth - (14 * bulletUiText.length) - 8, Game.canvasHeight - 20);
+      var bulletSize = 26;
+      var bulletCharW = 14 * (bulletSize / 18);
+      var bulletX = Game.canvasWidth - cornerMargin - Math.round(bulletCharW * bulletUiText.length);
+      var bulletY = Game.canvasHeight - cornerMargin;
+      Text.renderText(bulletUiText, bulletSize, bulletX, bulletY);
 
-      var barMaxHeight = Math.floor(Game.canvasHeight / 4);
+      // 速度条（紧贴屏幕左边缘）
+      var barMaxHeight = Math.floor(Game.canvasHeight / 1);
       var barWidth = 4;
-      var speedFullScale = 12;
-
+      var speedFullScale = 9;
       if (speedInt > 0) {
         var speedBarHeight = Math.min(barMaxHeight, Math.round((currentSpeed / speedFullScale) * barMaxHeight));
         if (speedBarHeight > 0) {
           context.fillRect(0, Game.canvasHeight - speedBarHeight, barWidth, speedBarHeight);
         }
+      }
+
+      // 子弹条（紧贴屏幕右边缘，线性变化）
+      var maxBullets = GameConfig.playerMaxBullets || 1;
+      var bulletFraction = Math.max(0, Math.min(1, availableBullets / maxBullets));
+      // 平滑插值到目标占比
+      var smoothFactor = 0.12; // 值越大变化越快
+      displayedBulletFraction += (bulletFraction - displayedBulletFraction) * smoothFactor;
+      var bulletBarHeight = Math.round(displayedBulletFraction * barMaxHeight);
+      if (bulletBarHeight > 0) {
+        var bulletBarX = Game.canvasWidth - barWidth; // 紧贴右边缘
+        context.fillRect(bulletBarX, Game.canvasHeight - bulletBarHeight, barWidth, bulletBarHeight);
       }
 
       context.restore();
@@ -2482,20 +2545,27 @@ window.addEventListener('DOMContentLoaded', function () {
         if (Game.FSM.state === 'waiting') break; // 标题界面不允许暂停
         paused = !paused;
         if (paused) {
-          // ship.stopThrust(); // 停止thrust音效
-          // 暂停时彻底停止所有音效播放
-          this.thrustPlaying = false;
+          this.thrustPlaying = false; // 不能改
+          // 暂停时：对除 background 外的音效重置并停止；background 保存进度并暂停
           for (const key in SFX) {
             if (typeof SFX[key] === 'function') {
-              const audio = SFX[key]();
-              if (audio && typeof audio.pause === 'function') {
-                audio.pause();
-                audio.currentTime = 0;
+              if (key === 'background') {
+                try { SFX.background('pause'); } catch (e) { }
+              } else {
+                const audio = SFX[key]();
+                if (audio && typeof audio.pause === 'function') {
+                  audio.pause();
+                  audio.currentTime = 0;
+                }
               }
             }
           }
         } else {  // 继续运行
           lastFrame = Date.now();
+          // 恢复背景音乐（如果未静音）
+          if (!SFX.muted) {
+            SFX.background('play');
+          }
           mainLoop();
         }
         break;
@@ -2507,6 +2577,15 @@ window.addEventListener('DOMContentLoaded', function () {
         break;
       case 'mute': // 静音
         SFX.muted = !SFX.muted;
+        try {
+          if (SFX.muted) {
+            // 暂存并暂停背景
+            SFX.background('pause');
+          } else {
+            // 恢复背景
+            SFX.background('play');
+          }
+        } catch (e) { }
         break;
       case 'darkmode': // 暗黑模式
         if (Game.primaryColor === GameConfig.darkColor) {
