@@ -158,6 +158,7 @@ const KEY_CODES = {
   77: 'mute',       // M键静音
   78: 'darkmode',    // N键黑暗模式
   80: 'pause',      // P键暂停
+  69: 'missile',    // E键导弹
   81: 'missile',    // Q键导弹
   85: 'playerui'   // U键开关速度/子弹UI
 }
@@ -2208,7 +2209,7 @@ window.addEventListener('DOMContentLoaded', function () {
   // if (window.matchMedia) { // 监听系统/浏览器主题变化，动态切换配色
   //   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeByPreference);
   // }
-  
+
   // 默认启用深色模式
   Game.primaryColor = GameConfig.lightColor;
   Game.secondaryColor = GameConfig.darkColor;
@@ -2410,45 +2411,47 @@ window.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    // 分数显示（增大并向内缩进）
-    var score_text = '' + Game.score;
-    var scoreSize = 28;
-    var scoreCharW = 14 * (scoreSize / 18);
-    var cornerMargin = 42;
-    var scoreX = Game.canvasWidth - cornerMargin - Math.round(scoreCharW * score_text.length);
-    Text.renderText(score_text, scoreSize, scoreX, cornerMargin);
+    // 分数与剩余生命显示（受 U 键控制，增大并向内缩进）
+    if (showPlayerUi) {
+      var score_text = '' + Game.score;
+      var scoreSize = 28;
+      var scoreCharW = 14 * (scoreSize / 18);
+      var cornerMargin = 42;
+      var scoreX = Game.canvasWidth - cornerMargin - Math.round(scoreCharW * score_text.length);
+      Text.renderText(score_text, scoreSize, scoreX, cornerMargin);
 
-    // 剩余生命显示（右上，增大并内缩）
-    var lifeMargin = cornerMargin;
-    var lifeSpacing = 17; // 图标间距
-    for (i = 0; i < Game.lives; i++) {
-      context.save();
-      extraDude.scale = 0.9;
-      extraDude.x = Game.canvasWidth - lifeMargin - (i * lifeSpacing) - 5;
-      extraDude.y = lifeMargin + 25;
-      extraDude.configureTransform();
-      extraDude.draw();
-
-      // 最左生命图标按 1/3、2/3 逐步从下往上涂黑
-      if (i === Game.lives - 1 && Game.lifeSegmentDamage > 0) {
-        var triBottom = 4;
-        var triTop = -12;
-        var triHeight = triBottom - triTop;
-        var fillStartY = triBottom - (Game.lifeSegmentDamage / 3) * triHeight;
-
+      // 剩余生命显示（右上，增大并内缩）
+      var lifeMargin = cornerMargin;
+      var lifeSpacing = 17; // 图标间距
+      for (i = 0; i < Game.lives; i++) {
         context.save();
-        context.beginPath();
-        context.moveTo(-5, 4);
-        context.lineTo(0, -12);
-        context.lineTo(5, 4);
-        context.closePath();
-        context.clip();
-        context.fillStyle = context.strokeStyle;  // 使用与线条相同的颜色填充
-        context.fillRect(-6, fillStartY, 12, triBottom - fillStartY);
+        extraDude.scale = 0.9;
+        extraDude.x = Game.canvasWidth - lifeMargin - (i * lifeSpacing) - 5;
+        extraDude.y = lifeMargin + 25;
+        extraDude.configureTransform();
+        extraDude.draw();
+
+        // 最左生命图标按 1/3、2/3 逐步从下往上涂黑
+        if (i === Game.lives - 1 && Game.lifeSegmentDamage > 0) {
+          var triBottom = 4;
+          var triTop = -12;
+          var triHeight = triBottom - triTop;
+          var fillStartY = triBottom - (Game.lifeSegmentDamage / 3) * triHeight;
+
+          context.save();
+          context.beginPath();
+          context.moveTo(-5, 4);
+          context.lineTo(0, -12);
+          context.lineTo(5, 4);
+          context.closePath();
+          context.clip();
+          context.fillStyle = context.strokeStyle;  // 使用与线条相同的颜色填充
+          context.fillRect(-6, fillStartY, 12, triBottom - fillStartY);
+          context.restore();
+        }
+
         context.restore();
       }
-
-      context.restore();
     }
 
     // 帧率显示（F 切换，左上角）
