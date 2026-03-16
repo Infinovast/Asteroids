@@ -14,7 +14,9 @@ const GameConfig = {
   playerBulletBurstShotInterval: 0, // 玩家机炮连发内间隔（帧）
   bulletLifetime: 50, // 子弹寿命（帧数）
   playerMissileCooldown: 50, // 玩家导弹发射间隔（帧）
-  playerMaxSpeed: 8, // 玩家最大速度
+  playerMaxSpeed: 8.3, // 玩家推进时最大速度
+  playerMaxDriftSpeed: 4, // 玩家不推进时最大漂浮速度
+  playerNaturalDecel: 2, // 玩家不推进时自然减速度（每秒）
   playerAccel: 0.5, // 玩家推进加速度
   playerBrakeAccel: 0.15, // 玩家刹车加速度
   playerRotSpeed: 7, // 玩家旋转速度
@@ -38,9 +40,9 @@ const GameConfig = {
 
   fighterFirstSpawnDelay: 11000, // 敌机首次生成延迟(ms)
   fighterSpawnInterval: 10000,   // 敌机生成基础间隔(ms)
-  fighterMaxSpeed: 8, // 敌机最大速度
-  fighterAccel: 0.5, // 敌机常规加速度
-  fighterAvoidAccel: 0.6, // 敌机躲避加速度
+  fighterMaxSpeed: 8.5, // 敌机最大速度
+  fighterAccel: 0.6, // 敌机常规加速度
+  fighterAvoidAccel: 0.7, // 敌机躲避加速度
   fighterIdleAccel: 0.35, // 敌机无目标加速度
   fighterTurnSpeed: 6, // 敌机旋转速度
   fighterAsteroidShootRange: 300, // 敌机射击陨石距离阈值
@@ -584,6 +586,7 @@ const Ship = function () {
   this.prox = null;
   this.proxCooldownCounter = 0;
   this.proxCooldownPrev = 0;
+  this.naturalDecelTimer = null;
 
   this.postMove = this.wrapPostMove;
 
@@ -789,10 +792,37 @@ const Ship = function () {
       }
     }
 
-    // 限制最高速度
-    if (Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y) > GameConfig.playerMaxSpeed) {
-      this.vel.x *= 0.95;
-      this.vel.y *= 0.95;
+    // 推进时使用最大速度上限；不推进时自然减速至漂浮上限。
+    var currentSpeed = Math.sqrt(this.vel.x * this.vel.x + this.vel.y * this.vel.y);
+    var maxAllowedSpeed = GameConfig.playerMaxSpeed;
+    if (KEY_STATUS.up) {
+      this.naturalDecelTimer = null;
+    }
+    if (!KEY_STATUS.up && currentSpeed > GameConfig.playerMaxDriftSpeed) {
+      var now = Date.now();
+      if (this.naturalDecelTimer == null) {
+        this.naturalDecelTimer = now;
+      }
+      var deltaSeconds = (now - this.naturalDecelTimer) / 1000;
+      this.naturalDecelTimer = now;
+      var reducedSpeed = Math.max(
+        GameConfig.playerMaxDriftSpeed,
+        currentSpeed - GameConfig.playerNaturalDecel * deltaSeconds
+      );
+      if (currentSpeed > 0) {
+        var speedScale = reducedSpeed / currentSpeed;
+        this.vel.x *= speedScale;
+        this.vel.y *= speedScale;
+        currentSpeed = reducedSpeed;
+      }
+    } else if (!KEY_STATUS.up) {
+      this.naturalDecelTimer = null;
+    }
+
+    if (currentSpeed > maxAllowedSpeed && currentSpeed > 0) {
+      var clampScale = maxAllowedSpeed / currentSpeed;
+      this.vel.x *= clampScale;
+      this.vel.y *= clampScale;
     }
   };
 
@@ -2826,7 +2856,7 @@ window.addEventListener('DOMContentLoaded', function () {
       // 速度条（紧贴屏幕左边缘）
       var barMaxHeight = Math.floor(Game.canvasHeight / 1);
       var barWidth = 4;
-      var speedFullScale = 9;
+      var speedFullScale = GameConfig.playerMaxSpeed || 9; // 定义满速对应的数值，超过该速度条将保持满格显示
       if (speedInt > 0) {
         var speedBarHeight = Math.min(barMaxHeight, Math.round((currentSpeed / speedFullScale) * barMaxHeight));
         if (speedBarHeight > 0) {
