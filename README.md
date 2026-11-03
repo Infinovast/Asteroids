@@ -81,8 +81,12 @@ python -m http.server 8000 --bind 127.0.0.1
 
 部署时，将 `index.html`、`styles.css`、`game.js` 和完整 `assets/` 目录放到任意静态托管服务，保留相对路径即可。运行时无需后端或环境变量。
 
-## 许可证与素材
+## Credits
+
+Based on the work of Doug McInnes: http://www.dougmcinnes.com/2010/05/12/html-5-asteroids
+
+## License
 
 项目原创代码采用 [MIT 许可证](LICENSE)，版权所有 © 2026 Harold Chiu。第三方素材保留其各自的权利与许可。
 
-Vector Battle 字体文件保留了原作者 ck! / Freaky Fonts 的版权信息；字体渲染与动画兼容代码的来源注释也保留在源码中。音频位于 `assets/audio/`，仓库中暂无其来源与授权说明，发布或再分发前需核实素材授权。
+Vector Battle 字体文件保留了原作者 ck! / Freaky Fonts 的版权信息，字体渲染与动画兼容代码的来源注释也保留在源码中。

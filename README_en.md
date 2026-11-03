@@ -81,8 +81,12 @@ The game uses Canvas 2D, a custom sprite system, and a spatial grid for collisio
 
 To deploy, upload `index.html`, `styles.css`, `game.js`, and the complete `assets/` directory to any static hosting service, preserving their relative paths. No backend or environment variables are needed at runtime.
 
-## License and assets
+## Credits
+
+Based on the work of Doug McInnes: http://www.dougmcinnes.com/2010/05/12/html-5-asteroids
+
+## License
 
 The project's original code is licensed under the [MIT License](LICENSE). Copyright © 2026 Harold Chiu. Third-party assets retain their respective rights and licenses.
 
-The Vector Battle font file retains the copyright information of its original author, ck! / Freaky Fonts. Source comments credit the font-rendering and animation compatibility code. Audio files are stored in `assets/audio/`; the repository does not currently document their sources or licenses. Verify asset permissions before publishing or redistributing them.
+The Vector Battle font file retains the copyright information of its original author, ck! / Freaky Fonts. Source comments credit the font-rendering and animation compatibility code.
