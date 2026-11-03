@@ -1,0 +1,13 @@
+# Local deployment state and editor instructions
+.wrangler/
+.github/
+
+# Local environment files and private keys
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
